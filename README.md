@@ -1,2 +1,2 @@
 # IN-DES-Articulados
-Propuesta del equipo Articulados. IN-DES 2026-2
+Propuesta del equipo Articulados. IN-DES 2026-1
