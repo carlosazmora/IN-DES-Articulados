@@ -35,12 +35,9 @@ markdownify==1.2.2
 MarkupSafe==3.0.3
 matplotlib==3.10.9
 mkl-service==2.5.2
-mkl_fft @ file:///C:/Users/task_177730050190117/croot/mkl_fft_1777300571710/work
-mkl_random @ file:///C:/miniconda3/conda-bld/mkl_random_1761593081220/work
 narwhals==2.20.0
 networkx==3.6.1
 numba==0.65.1
-numpy @ file:///C:/Users/task_177618877855128/croot/numpy_and_numpy_base_1776188887873/work/dist/numpy-2.4.4-cp314-cp314-win_amd64.whl#sha256=d6d42aaa3537d946c876e6f52c933c42c72840349869ed839070a8ed8cd2d00e
 onnxruntime==1.25.1
 openpyxl==3.1.5
 packaging==26.2
