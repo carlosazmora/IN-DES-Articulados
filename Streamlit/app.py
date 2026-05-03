@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px 
 from datetime import datetime
+from adzuna import cargar_datos_adzuna   # ← nuevo import
 
 # Forzar caché limpio si es necesario
 st.cache_data.clear()
@@ -37,6 +38,7 @@ st.sidebar.title("📊 Observatorio Laboral")
 seccion = st.sidebar.radio("Navegación", [
     "🏠 Panel Ejecutivo",
     "🔎 Análisis por Programa",
+    "🌍 Datos Internacionales (Adzuna)",
     "📈 Tendencias e Insights",
     "🚨 Alertas",
     "💰 Variaciones Salariales",
@@ -134,5 +136,44 @@ elif seccion == "🔧 Mantenimiento":
     st.write("- Datos: Mensual / Trimestral según fuente")
     st.write("- Dashboard: Automático cada vez que se actualicen los datos")
     st.write("- Auditoría: Mensual por responsable de Alumni")
+
+# ==================== NUEVA SECCIÓN ====================
+elif seccion == "🌍 Datos Internacionales (Adzuna)":
+    st.title("🌍 Análisis Internacional - Adzuna")
+    
+    with st.spinner("Cargando datos de Adzuna..."):
+        df_adzuna = cargar_datos_adzuna()
+    
+    if df_adzuna.empty:
+        st.error("No se pudieron obtener datos de Adzuna")
+    else:
+        st.success(f"Datos cargados: {len(df_adzuna):,} registros")
+        
+        # Filtros
+        col1, col2 = st.columns(2)
+        with col1:
+            pais_sel = st.selectbox("País", df_adzuna["pais_nombre"].unique())
+        with col2:
+            perfil_sel = st.multiselect("Perfiles", df_adzuna["perfil"].unique(), default=["software engineer"])
+        
+        # Filtrar
+        df_filtrado = df_adzuna[
+            (df_adzuna["pais_nombre"] == pais_sel) & 
+            (df_adzuna["perfil"].isin(perfil_sel))
+        ]
+        
+        # Gráfico
+        fig = px.bar(df_filtrado, x="perfil", y="vacantes", 
+                     title=f"Vacantes en {pais_sel}",
+                     color="perfil")
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.dataframe(df_filtrado, use_container_width=True)
+
+        # En la misma sección
+        st.subheader("Tendencia por País")
+        fig2 = px.line(df_adzuna.groupby(['pais_nombre', 'fecha']).sum().reset_index(), 
+                    x='fecha', y='vacantes', color='pais_nombre')
+        st.plotly_chart(fig2)
 
 st.caption("MVP - Observatorio del Mercado Laboral Unisabana • Hecho con Streamlit")
