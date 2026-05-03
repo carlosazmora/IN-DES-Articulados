@@ -4,7 +4,6 @@ from adzuna import get_analisis_completo
 
 def mostrar_variaciones_salariales():
     data = get_analisis_completo()
-    df = data['df']
     
     st.subheader("Demanda por Perfil (proxy de oportunidad salarial)")
     fig = px.bar(data['top_perfiles'], 

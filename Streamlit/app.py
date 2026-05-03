@@ -106,7 +106,7 @@ elif seccion == "🚨 Alertas":
 # ==================== VARIACIONES SALARIALES ====================
 elif seccion == "💰 Variaciones Salariales":
     st.title("💰 Variaciones Salariales")
-    st.plotly_chart(px.bar(df_programas, x='Programa', y='Salario_inicial', color='Sector'), use_container_width=True)
+    mostrar_variaciones_salariales()
 
 # ==================== COBERTURA GEOGRÁFICA ====================
 elif seccion == "🌍 Cobertura Geográfica":
