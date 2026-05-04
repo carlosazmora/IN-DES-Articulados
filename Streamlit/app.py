@@ -9,6 +9,7 @@ from datetime import datetime
 from DatosInternacionales import mostrar_boton_actualizacion, get_analisis_completo
 from VariacionesSalariales import mostrar_variaciones_salariales
 from Tendencias import mostrar_tendencias_e_insights
+from Habilidades import mostrar_habilidades, pipeline_datos, bd_tiene_datos
 
 st.set_page_config(page_title="Observatorio Laboral Unisabana", layout="wide", page_icon="📊")
 
