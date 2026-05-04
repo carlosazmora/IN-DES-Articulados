@@ -7,6 +7,4 @@ lxml
 openpyxl
 python-dotenv
 anthropic
-duckdb
-os
-ipywidgets
+
