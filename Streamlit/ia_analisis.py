@@ -1,4 +1,5 @@
 # Streamlit/ia_analisis.py
+import os
 import streamlit as st
 from anthropic import Anthropic
 
