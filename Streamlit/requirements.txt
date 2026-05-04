@@ -9,3 +9,5 @@ python-dotenv
 anthropic
 duckdb
 matplotlib
+re
+io
