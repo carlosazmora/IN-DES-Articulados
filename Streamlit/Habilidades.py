@@ -1,3 +1,13 @@
+"""
+Habilidades.py
+==============
+Módulo del Observatorio Laboral — Habilidades y Conocimientos O*NET.
+
+Expone:
+  - pipeline_datos()          → descarga O*NET y guarda en DuckDB
+  - mostrar_habilidades()     → sección Streamlit completa
+"""
+
 import requests
 import zipfile
 import io
@@ -5,14 +15,17 @@ import re
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.figure as mfig
 import duckdb
+import streamlit as st
 from bs4 import BeautifulSoup
+
 
 # ============================================================
 # CONFIGURACIÓN
 # ============================================================
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "observatorio_laboral.duckdb")
+DB_PATH   = "observatorio_laboral.duckdb"
 TABLA_SK  = "skills"
 TABLA_KN  = "knowledge"
 TABLA_OCC = "ocupaciones"
@@ -32,36 +45,53 @@ PALETTE = {
 # 1. PIPELINE DE DATOS  →  DuckDB
 # ============================================================
 
-def pipeline_datos(db_path: str = DB_PATH) -> None:
+def pipeline_datos(db_path: str = DB_PATH, log_fn=None) -> None:
     """
     Descarga la versión más reciente de O*NET, procesa los datos
-    y los persiste en DuckDB con la siguiente lógica:
+    y los persiste en DuckDB.
 
-    - Si la BD no existe            → la crea y crea las tablas.
-    - Si la BD existe, sin tabla    → crea solo esa tabla.
-    - Si la BD y la tabla existen   → reemplaza la tabla.
+    Casos cubiertos por CREATE OR REPLACE TABLE:
+      - BD no existe          → la crea + crea las tablas
+      - BD existe, sin tabla  → crea solo esa tabla
+      - BD y tabla existen    → reemplaza la tabla
     """
+    def log(msg: str):
+        if log_fn:
+            log_fn(msg)
 
-    # ── 1a. Scraping ──────────────────────────────────────────
-    url = _get_latest_url()
+    log("🔍 Buscando versión más reciente de O*NET...")
+    url = _get_latest_url(log)
 
-    # ── 1b. Descarga en memoria ───────────────────────────────
-    archivos = _descargar_en_memoria(url)
+    log("⬇️  Descargando ZIP en memoria...")
+    archivos = _descargar_en_memoria(url, log)
 
-    # ── 1c. Construir DataFrames limpios ──────────────────────
-    df_occ, df_sk, df_kn = _cargar_dataframes(archivos)
+    log("🔧 Procesando DataFrames...")
+    df_occ, df_sk, df_kn = _cargar_dataframes(archivos, log)
 
-    # ── 1d. Persistir en DuckDB ───────────────────────────────
-    _guardar_en_duckdb(df_occ, df_sk, df_kn, db_path)
+    log(f"💾 Guardando en DuckDB: '{db_path}'")
+    _guardar_en_duckdb(df_occ, df_sk, df_kn, db_path, log)
 
-    print(f"\n✅ Pipeline completado. Base de datos: '{db_path}'")
+    log("✅ Pipeline completado.")
+
+
+def bd_tiene_datos(db_path: str = DB_PATH) -> bool:
+    """Devuelve True si el .duckdb existe y tiene las tres tablas."""
+    if not os.path.exists(db_path):
+        return False
+    try:
+        con     = duckdb.connect(db_path, read_only=True)
+        tablas  = {r[0] for r in con.execute("SHOW TABLES").fetchall()}
+        con.close()
+        return {TABLA_SK, TABLA_KN, TABLA_OCC}.issubset(tablas)
+    except Exception:
+        return False
 
 
 # ----------------------------------------------------------
 # Helpers internos del pipeline
 # ----------------------------------------------------------
 
-def _get_latest_url() -> str:
+def _get_latest_url(log=None) -> str:
     BASE    = "https://www.onetcenter.org"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     page    = requests.get(f"{BASE}/database.html", headers=headers, timeout=30)
@@ -83,28 +113,25 @@ def _get_latest_url() -> str:
 
     candidates.sort(key=lambda x: x[0], reverse=True)
     version, url = candidates[0]
-    print(f"✅ Versión más reciente: {version[0]}.{version[1]}")
-    print(f"   URL: {url}")
+    if log:
+        log(f"   Versión encontrada: {version[0]}.{version[1]}")
     return url
 
 
-def _descargar_en_memoria(url: str) -> dict:
-    print("\n⬇️  Descargando base de datos O*NET...")
-    headers = {"User-Agent": "Mozilla/5.0"}
-    r = requests.get(url, headers=headers, timeout=120)
+def _descargar_en_memoria(url: str, log=None) -> dict:
+    headers  = {"User-Agent": "Mozilla/5.0"}
+    r        = requests.get(url, headers=headers, timeout=120)
     r.raise_for_status()
-
     archivos = {}
     with zipfile.ZipFile(io.BytesIO(r.content)) as z:
         for nombre in z.namelist():
             archivos[nombre.lower()] = z.read(nombre)
-
-    print(f"   {len(archivos)} archivos cargados en memoria.")
+    if log:
+        log(f"   {len(archivos)} archivos cargados en memoria.")
     return archivos
 
 
 def _buscar_archivo(archivos: dict, nombre_exacto: str):
-    """Coincidencia exacta sobre el nombre base del archivo."""
     clave = nombre_exacto.lower()
     for ruta, contenido in archivos.items():
         if os.path.basename(ruta) == clave:
@@ -132,9 +159,7 @@ def _detectar_col_valor(df: pd.DataFrame) -> str:
     raise ValueError(f"Sin columna numérica. Columnas: {df.columns.tolist()}")
 
 
-def _cargar_dataframes(archivos: dict):
-    print("\n🔧 Procesando dataframes...")
-
+def _cargar_dataframes(archivos: dict, log=None):
     df_occ = _leer_tsv(archivos, "occupation data.txt")
     df_sk  = _leer_tsv(archivos, "skills.txt")
     df_kn  = _leer_tsv(archivos, "knowledge.txt")
@@ -145,39 +170,39 @@ def _cargar_dataframes(archivos: dict):
             df.rename(columns={col: "Data Value"}, inplace=True)
         df["Data Value"] = pd.to_numeric(df["Data Value"], errors="coerce").round(2)
 
-    print(f"   ✅ Ocupaciones : {df_occ.shape}")
-    print(f"   ✅ Skills      : {df_sk.shape}")
-    print(f"   ✅ Knowledge   : {df_kn.shape}")
+    if log:
+        log(f"   Ocupaciones : {df_occ.shape[0]:,} filas")
+        log(f"   Skills      : {df_sk.shape[0]:,} filas")
+        log(f"   Knowledge   : {df_kn.shape[0]:,} filas")
     return df_occ, df_sk, df_kn
 
 
-def _guardar_en_duckdb(
-    df_occ: pd.DataFrame,
-    df_sk:  pd.DataFrame,
-    df_kn:  pd.DataFrame,
-    db_path: str,
-) -> None:
-    """
-    Persiste los tres DataFrames en DuckDB.
-
-    CREATE OR REPLACE TABLE cubre los tres casos en una sola instrucción:
-      - BD nueva         → duckdb.connect() crea el archivo, luego crea la tabla.
-      - BD sin tabla     → crea solo la tabla que falta.
-      - BD con tabla     → descarta la tabla existente y la reemplaza.
-    """
-    print(f"\n💾 Guardando en DuckDB: '{db_path}'")
-    con = duckdb.connect(db_path)   # crea el .duckdb si no existe
-
+def _guardar_en_duckdb(df_occ, df_sk, df_kn, db_path: str, log=None) -> None:
+    con = duckdb.connect(db_path)
     for nombre_tabla, df in [(TABLA_OCC, df_occ), (TABLA_SK, df_sk), (TABLA_KN, df_kn)]:
         con.execute(f"CREATE OR REPLACE TABLE {nombre_tabla} AS SELECT * FROM df")
         n = con.execute(f"SELECT COUNT(*) FROM {nombre_tabla}").fetchone()[0]
-        print(f"   📋 '{nombre_tabla}' → {n:,} filas guardadas")
-
+        if log:
+            log(f"   '{nombre_tabla}' → {n:,} filas guardadas")
     con.close()
 
 
 # ============================================================
-# 2. GRÁFICOS
+# 2. CARGA DESDE DUCKDB
+# ============================================================
+
+@st.cache_data(show_spinner=False)
+def _cargar_desde_db(db_path: str = DB_PATH):
+    con    = duckdb.connect(db_path, read_only=True)
+    df_sk  = con.execute(f"SELECT * FROM {TABLA_SK}").df()
+    df_kn  = con.execute(f"SELECT * FROM {TABLA_KN}").df()
+    df_occ = con.execute(f"SELECT * FROM {TABLA_OCC}").df()
+    con.close()
+    return df_sk, df_kn, df_occ
+
+
+# ============================================================
+# 3. FUNCIONES DE GRÁFICOS  (retornan fig, no plt.show)
 # ============================================================
 
 def _agregar(df: pd.DataFrame) -> pd.DataFrame:
@@ -191,7 +216,7 @@ def _agregar(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def _base_fig(title: str, figsize=(14, 7)):
+def _base_fig(title: str, figsize=(14, 7)) -> tuple:
     fig, ax = plt.subplots(figsize=figsize)
     fig.patch.set_facecolor(PALETTE["bg"])
     ax.set_facecolor(PALETTE["panel"])
@@ -204,8 +229,7 @@ def _base_fig(title: str, figsize=(14, 7)):
     return fig, ax
 
 
-def grafico_skills_top(df_skills: pd.DataFrame) -> None:
-    """Top 20 skills por promedio de Data Value."""
+def fig_skills_top(df_skills: pd.DataFrame) -> mfig.Figure:
     agg     = _agregar(df_skills).head(20)
     fig, ax = _base_fig("Top 20 Skills más demandadas en O*NET", figsize=(14, 8))
     bars    = ax.barh(
@@ -221,11 +245,10 @@ def grafico_skills_top(df_skills: pd.DataFrame) -> None:
     ax.set_xlabel("Promedio del Data Value", color=PALETTE["muted"], fontsize=10)
     ax.tick_params(axis="y", labelcolor=PALETTE["text"])
     plt.tight_layout()
-    plt.show()
+    return fig
 
 
-def grafico_knowledge_top(df_knowledge: pd.DataFrame) -> None:
-    """Top 20 áreas de conocimiento por promedio de Data Value."""
+def fig_knowledge_top(df_knowledge: pd.DataFrame) -> mfig.Figure:
     agg     = _agregar(df_knowledge).head(20)
     fig, ax = _base_fig("Top 20 Áreas de Conocimiento más demandadas en O*NET", figsize=(14, 8))
     bars    = ax.barh(
@@ -241,11 +264,10 @@ def grafico_knowledge_top(df_knowledge: pd.DataFrame) -> None:
     ax.set_xlabel("Promedio del Data Value", color=PALETTE["muted"], fontsize=10)
     ax.tick_params(axis="y", labelcolor=PALETTE["text"])
     plt.tight_layout()
-    plt.show()
+    return fig
 
 
-def grafico_skills_dist(df_skills: pd.DataFrame) -> None:
-    """Histograma de distribución de valores de skills."""
+def fig_skills_dist(df_skills: pd.DataFrame) -> mfig.Figure:
     vals    = df_skills["Data Value"].dropna()
     fig, ax = _base_fig("Distribución de valores — Skills", figsize=(12, 5))
     ax.hist(vals, bins=40, color=PALETTE["accent1"], edgecolor=PALETTE["bg"], linewidth=0.4)
@@ -253,11 +275,10 @@ def grafico_skills_dist(df_skills: pd.DataFrame) -> None:
     ax.set_ylabel("Frecuencia",  color=PALETTE["muted"], fontsize=10)
     ax.tick_params(axis="both",  labelcolor=PALETTE["muted"])
     plt.tight_layout()
-    plt.show()
+    return fig
 
 
-def grafico_knowledge_dist(df_knowledge: pd.DataFrame) -> None:
-    """Histograma de distribución de valores de knowledge."""
+def fig_knowledge_dist(df_knowledge: pd.DataFrame) -> mfig.Figure:
     vals    = df_knowledge["Data Value"].dropna()
     fig, ax = _base_fig("Distribución de valores — Knowledge", figsize=(12, 5))
     ax.hist(vals, bins=40, color=PALETTE["accent2"], edgecolor=PALETTE["bg"], linewidth=0.4)
@@ -265,22 +286,18 @@ def grafico_knowledge_dist(df_knowledge: pd.DataFrame) -> None:
     ax.set_ylabel("Frecuencia",  color=PALETTE["muted"], fontsize=10)
     ax.tick_params(axis="both",  labelcolor=PALETTE["muted"])
     plt.tight_layout()
-    plt.show()
+    return fig
 
 
-def grafico_ocupaciones(df_occ: pd.DataFrame) -> None:
-    """Barras: cantidad de ocupaciones por grupo SOC (2 dígitos)."""
+def fig_ocupaciones(df_occ: pd.DataFrame) -> mfig.Figure | None:
     if "O*NET-SOC Code" not in df_occ.columns:
-        print("   ⚠️  Sin columna 'O*NET-SOC Code' — se omite.")
-        return
-
+        return None
     df             = df_occ.copy()
     df["Grupo"]    = df["O*NET-SOC Code"].astype(str).str[:2]
     conteo         = df["Grupo"].value_counts().head(20).reset_index()
     conteo.columns = ["Grupo SOC", "Cantidad"]
-
-    fig, ax = _base_fig("Top 20 Grupos Ocupacionales (por código SOC)", figsize=(12, 6))
-    bars    = ax.bar(
+    fig, ax        = _base_fig("Top 20 Grupos Ocupacionales (por código SOC)", figsize=(12, 6))
+    bars           = ax.bar(
         conteo["Grupo SOC"], conteo["Cantidad"],
         color=PALETTE["accent3"], edgecolor="none", width=0.6,
     )
@@ -294,21 +311,17 @@ def grafico_ocupaciones(df_occ: pd.DataFrame) -> None:
     ax.set_ylabel("Nº de ocupaciones",               color=PALETTE["muted"], fontsize=10)
     ax.tick_params(axis="both", labelcolor=PALETTE["muted"])
     plt.tight_layout()
-    plt.show()
+    return fig
 
 
-def grafico_scatter_skills_vs_knowledge(
+def fig_scatter_skills_vs_knowledge(
     df_skills: pd.DataFrame, df_knowledge: pd.DataFrame
-) -> None:
-    """Scatter: promedio skill vs promedio knowledge para elementos comunes."""
+) -> mfig.Figure | None:
     sk_agg = _agregar(df_skills).rename(columns={"Promedio": "Skill"})
     kn_agg = _agregar(df_knowledge).rename(columns={"Promedio": "Knowledge"})
     merged = sk_agg.merge(kn_agg, on="Element Name", how="inner")
-
     if merged.empty:
-        print("   ⚠️  Sin elementos comunes — se omite scatter.")
-        return
-
+        return None
     fig, ax = _base_fig("Skills vs Knowledge — Elementos en común", figsize=(10, 7))
     sc = ax.scatter(
         merged["Skill"], merged["Knowledge"],
@@ -319,7 +332,6 @@ def grafico_scatter_skills_vs_knowledge(
     cbar.ax.yaxis.set_tick_params(color=PALETTE["muted"])
     cbar.outline.set_edgecolor(PALETTE["panel"])
     plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color=PALETTE["muted"])
-
     for _, row in merged.nlargest(5, "Skill").iterrows():
         ax.annotate(
             row["Element Name"], (row["Skill"], row["Knowledge"]),
@@ -330,37 +342,110 @@ def grafico_scatter_skills_vs_knowledge(
     ax.set_ylabel("Promedio Knowledge", color=PALETTE["muted"], fontsize=10)
     ax.tick_params(axis="both", labelcolor=PALETTE["muted"])
     plt.tight_layout()
-    plt.show()
-
-
-def generar_todos_los_graficos(db_path: str = DB_PATH) -> None:
-    """
-    Lee los datos desde DuckDB y genera todos los gráficos.
-    Requiere haber ejecutado pipeline_datos() al menos una vez.
-    """
-    con    = duckdb.connect(db_path, read_only=True)
-    df_sk  = con.execute(f"SELECT * FROM {TABLA_SK}").df()
-    df_kn  = con.execute(f"SELECT * FROM {TABLA_KN}").df()
-    df_occ = con.execute(f"SELECT * FROM {TABLA_OCC}").df()
-    con.close()
-
-    print("📊 Generando gráficos...")
-    grafico_skills_top(df_sk)
-    grafico_knowledge_top(df_kn)
-    grafico_skills_dist(df_sk)
-    grafico_knowledge_dist(df_kn)
-    grafico_ocupaciones(df_occ)
-    grafico_scatter_skills_vs_knowledge(df_sk, df_kn)
-    print("✅ Gráficos listos.")
+    return fig
 
 
 # ============================================================
-# 3. ENTRY POINT
+# 4. SECCIÓN STREAMLIT PRINCIPAL
 # ============================================================
 
-# if __name__ == "__main__":
-#     # Paso 1 — descarga, procesa y guarda en DuckDB
-#     pipeline_datos()
+def mostrar_habilidades() -> None:
+    """
+    Renderiza la sección completa de Habilidades en la app Streamlit.
+    Llama a esta función desde App.py.
+    """
+    st.title("🎯 Habilidades y Conocimientos")
+    st.markdown("Análisis de habilidades y áreas de conocimiento más demandadas según la base de datos **O\\*NET** (EE.UU.).")
 
-#     # Paso 2 — lee desde DuckDB y muestra los gráficos
-#     generar_todos_los_graficos()
+    # ── Panel de gestión de datos ─────────────────────────────
+    with st.expander("🔄 Gestión de datos O*NET", expanded=not bd_tiene_datos()):
+        col_estado, col_boton = st.columns([3, 1])
+
+        if bd_tiene_datos():
+            con      = duckdb.connect(DB_PATH, read_only=True)
+            n_sk     = con.execute(f"SELECT COUNT(*) FROM {TABLA_SK}").fetchone()[0]
+            n_kn     = con.execute(f"SELECT COUNT(*) FROM {TABLA_KN}").fetchone()[0]
+            con.close()
+            with col_estado:
+                st.caption(f"✅ Datos disponibles · Skills: **{n_sk:,}** · Knowledge: **{n_kn:,}**")
+            with col_boton:
+                actualizar = st.button("🔄 Actualizar O*NET", use_container_width=True)
+        else:
+            with col_estado:
+                st.caption("❌ Sin datos. Presiona **Cargar O*NET** para inicializar.")
+            with col_boton:
+                actualizar = st.button("🟢 Cargar O*NET", use_container_width=True)
+
+        if actualizar:
+            log_lines = []
+            with st.spinner("Descargando y procesando O*NET... (puede tardar ~1 min)"):
+                try:
+                    pipeline_datos(log_fn=log_lines.append)
+                    st.cache_data.clear()
+                    st.success("✅ Datos actualizados correctamente.")
+                except Exception as e:
+                    st.error(f"❌ Error: {e}")
+            with st.expander("Ver log"):
+                st.text("\n".join(log_lines))
+            st.rerun()
+
+    st.divider()
+
+    # ── Verificar datos disponibles ───────────────────────────
+    if not bd_tiene_datos():
+        st.info("⬆️ Usa el panel de arriba para cargar los datos de O*NET por primera vez.")
+        return
+
+    df_sk, df_kn, df_occ = _cargar_desde_db()
+
+    # ── Tabs de visualización ─────────────────────────────────
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🔵 Top Skills",
+        "🟢 Top Knowledge",
+        "📊 Dist. Skills",
+        "📊 Dist. Knowledge",
+        "🏢 Ocupaciones",
+        "🔀 Skills vs Knowledge",
+    ])
+
+    with tab1:
+        st.subheader("Top 20 Skills más demandadas")
+        fig = fig_skills_top(df_sk)
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+
+    with tab2:
+        st.subheader("Top 20 Áreas de Conocimiento más demandadas")
+        fig = fig_knowledge_top(df_kn)
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+
+    with tab3:
+        st.subheader("Distribución de valores — Skills")
+        fig = fig_skills_dist(df_sk)
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+
+    with tab4:
+        st.subheader("Distribución de valores — Knowledge")
+        fig = fig_knowledge_dist(df_kn)
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+
+    with tab5:
+        st.subheader("Grupos Ocupacionales (código SOC)")
+        fig = fig_ocupaciones(df_occ)
+        if fig:
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)
+        else:
+            st.warning("No se encontró la columna 'O*NET-SOC Code' en los datos.")
+
+    with tab6:
+        st.subheader("Skills vs Knowledge — correlación de promedios")
+        fig = fig_scatter_skills_vs_knowledge(df_sk, df_kn)
+        if fig:
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)
+        else:
+            st.warning("Sin elementos comunes entre Skills y Knowledge.")
