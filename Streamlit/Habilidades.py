@@ -345,6 +345,33 @@ def fig_ocupaciones(df_occ: pd.DataFrame) -> mfig.Figure | None:
     plt.tight_layout()
     return fig
 
+def _tabla_soc_referencia() -> pd.DataFrame:
+    """Tabla de referencia de los grupos ocupacionales SOC (2 dígitos)."""
+    return pd.DataFrame([
+        ("11", "Gerencia y Dirección",                         "CEOs, gerentes, administradores de empresas"),
+        ("13", "Negocios y Finanzas",                          "Analistas financieros, contadores, auditores"),
+        ("15", "Computación y Matemáticas",                    "Programadores, científicos de datos, ingenieros de software"),
+        ("17", "Arquitectura e Ingeniería",                    "Ingenieros civiles, mecánicos, eléctricos, arquitectos"),
+        ("19", "Ciencias Naturales y Sociales",                "Biólogos, químicos, economistas, psicólogos"),
+        ("21", "Servicios Sociales y Comunitarios",            "Trabajadores sociales, consejeros, orientadores"),
+        ("23", "Derecho y Jurídica",                           "Abogados, jueces, paralegales"),
+        ("25", "Educación y Bibliotecología",                  "Docentes, profesores universitarios, bibliotecarios"),
+        ("27", "Arte, Diseño y Medios",                        "Diseñadores gráficos, músicos, periodistas, actores"),
+        ("29", "Salud — Profesionales",                        "Médicos, enfermeras, farmacéuticos, dentistas"),
+        ("31", "Salud — Técnicos y Asistentes",                "Auxiliares de enfermería, técnicos de laboratorio"),
+        ("33", "Seguridad y Protección",                       "Policías, bomberos, guardas de seguridad"),
+        ("35", "Preparación y Servicio de Alimentos",          "Chefs, cocineros, meseros, bartenders"),
+        ("37", "Mantenimiento de Edificios y Espacios",        "Conserjes, jardineros, personal de limpieza"),
+        ("39", "Cuidado Personal y Servicios",                 "Estilistas, cuidadores, entrenadores personales"),
+        ("41", "Ventas",                                       "Vendedores, representantes comerciales, agentes"),
+        ("43", "Soporte Administrativo y de Oficina",          "Secretarias, recepcionistas, operadores de datos"),
+        ("45", "Agricultura, Pesca y Forestal",                "Agricultores, pescadores, trabajadores forestales"),
+        ("47", "Construcción y Extracción",                    "Albañiles, electricistas, mineros, soldadores"),
+        ("49", "Instalación y Reparación",                     "Técnicos de mantenimiento, mecánicos, electricistas"),
+        ("51", "Producción e Industria",                       "Operadores de maquinaria, ensambladores, inspectores de calidad"),
+        ("53", "Transporte y Logística",                       "Conductores, pilotos, operadores de grúas, despachadores"),
+        ("55", "Fuerzas Militares",                            "Personal militar de todas las ramas"),
+    ], columns=["Código SOC", "Grupo Ocupacional", "Ejemplos de ocupaciones"])
 
 def fig_scatter_skills_vs_knowledge(
     df_skills: pd.DataFrame, df_knowledge: pd.DataFrame
@@ -489,3 +516,4 @@ def mostrar_habilidades() -> None:
             plt.close(fig)
         else:
             st.warning("Sin elementos comunes entre Skills y Knowledge.")
+          
