@@ -41,6 +41,7 @@ seccion = st.sidebar.radio("Navegación", [
     "🏠 Panel Ejecutivo",
     "🔎 Análisis por Programa",
     "🌍 Datos Internacionales",
+    "🎯 Habilidades",        ##########
     "📈 Tendencias e Insights",
     "🚨 Alertas",
     "💰 Variaciones Salariales",
@@ -111,10 +112,64 @@ if seccion == "🏠 Panel Ejecutivo":
     from DatosInternacionales import DB_PATH ## borrable
     st.info(f"Ruta del .duckdb: `{DB_PATH}`")  ## borrable
     st.divider()
-
-
     #### Finalización Código de porueba ======================
+    #### Prueba de Habilidades ======================================================
+    # --- DuckDB: Habilidades O*NET ---
+    from Habilidades import (
+        pipeline_datos as habilidades_pipeline,
+        bd_tiene_datos, DB_PATH as HAB_DB_PATH,
+        TABLA_SK, TABLA_KN, TABLA_OCC
+        )
+    import duckdb as _ddb2
 
+    _hab_lista = bd_tiene_datos()
+
+    with st.expander("🎯 Gestión de datos de Habilidades O*NET (DuckDB)", expanded=True):
+        col_estado, col_boton = st.columns([3, 1])
+
+        if _hab_lista:
+            _con = _ddb2.connect(HAB_DB_PATH, read_only=True)
+            _n_sk  = _con.execute(f"SELECT COUNT(*) FROM {TABLA_SK}").fetchone()[0]
+            _n_kn  = _con.execute(f"SELECT COUNT(*) FROM {TABLA_KN}").fetchone()[0]
+            _n_occ = _con.execute(f"SELECT COUNT(*) FROM {TABLA_OCC}").fetchone()[0]
+            _con.close()
+            with col_estado:
+                st.caption(
+                    f"✅ Habilidades listas · "
+                    f"Skills: **{_n_sk:,}** · "
+                    f"Knowledge: **{_n_kn:,}** · "
+                    f"Ocupaciones: **{_n_occ:,}**"
+                )
+            with col_boton:
+                if st.button("🔄 Actualizar Habilidades", use_container_width=True, key="btn_hab_update"):
+                    _log = []
+                    with st.spinner("Descargando O*NET y actualizando tablas..."):
+                        try:
+                            habilidades_pipeline(log_fn=_log.append)
+                            st.cache_data.clear()
+                            st.success("✅ Habilidades actualizadas.")
+                        except Exception as _e:
+                            st.error(f"❌ Error: {_e}")
+                    with st.expander("Ver log"):
+                        st.text("\n".join(_log))
+                    st.rerun()
+        else:
+            with col_estado:
+                st.caption("❌ Tablas de habilidades no encontradas. Presiona **Crear Habilidades** para inicializarlas.")
+            with col_boton:
+                if st.button("🟢 Crear Habilidades", use_container_width=True, key="btn_hab_create"):
+                    _log = []
+                    with st.spinner("Descargando O*NET... (puede tardar ~1 min)"):
+                        try:
+                            habilidades_pipeline(log_fn=_log.append)
+                            st.cache_data.clear()
+                            st.success("✅ Tablas de habilidades creadas.")
+                        except Exception as _e:
+                            st.error(f"❌ Error: {_e}")
+                    with st.expander("Ver log"):
+                        st.text("\n".join(_log))
+                    st.rerun()
+#### finalización prueba Habilidades
 
 # ==================== ANÁLISIS POR PROGRAMA ====================
 elif seccion == "🔎 Análisis por Programa":
@@ -168,6 +223,11 @@ elif seccion == "🔧 Mantenimiento":
     st.write("- Dashboard: Automático cada vez que se actualicen los datos")
     st.write("- Auditoría: Mensual por responsable de Alumni")
 
+# ===================== HABILIDADES==================================================================================
+# ==================== HABILIDADES ====================
+elif seccion == "🎯 Habilidades":
+    from Habilidades import mostrar_habilidades
+    mostrar_habilidades()
 # ==================== DATOS INTERNACIONALES ====================
 elif seccion == "🌍 Datos Internacionales":
     st.title("🌍 Análisis Internacional - Adzuna")
