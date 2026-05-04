@@ -153,7 +153,7 @@ def mostrar_boton_actualizacion():
                 f"{st.session_state.datos_adzuna_fecha.strftime('%d/%m/%Y a las %H:%M')}"
             )
         else:
-            st.caption("⚠️ Sin datos cargados. Presiona **Actualizar** para consultar Adzuna.")
+            st.caption("⚠️ Sin datos cargados. Presiona **Actualizar DB** para consultar Adzuna.")
 
     with col2:
         if st.button("🔄 Actualizar datos", use_container_width=True):

@@ -160,62 +160,11 @@ if seccion == "🏠 Panel de Actualización":
                     f"Ocupaciones: **{_n_occ:,}**"
                 )
             with col_boton:
-                if st.button("🔄 Actualizar Habilidades", use_container_width=True, key="btn_hab_update"):
+                if st.button("🔄 Actualizar Datos", use_container_width=True, key="btn_hab_update"):
                     def proceso(log_fn):
                         habilidades_pipeline(log_fn=log_fn)
                         st.cache_data.clear()
                     ejecutar_con_progreso(proceso, "Actualizando habilidades O*NET...")
-        else:
-            with col_estado:
-                st.caption("❌ Tablas de habilidades no encontradas. Presiona **Crear Habilidades** para inicializarlas.")
-            with col_boton:
-                if st.button("🟢 Crear Habilidades", use_container_width=True, key="btn_hab_create"):
-                    _log = []
-                    with st.spinner("Descargando O*NET... (puede tardar ~1 min)"):
-                        try:
-                            habilidades_pipeline(log_fn=_log.append)
-                            st.cache_data.clear()
-                            st.success("✅ Tablas de habilidades creadas.")
-                        except Exception as _e:
-                            st.error(f"❌ Error: {_e}")
-                    with st.expander("Ver log"):
-                        st.text("\n".join(_log))
-                    st.rerun()
-    st.divider()
-    
-    #### Prueba de Habilidades ===================================================================================
-    
-    _hab_lista = bd_tiene_datos()
-
-    with st.expander("🎯 Gestión de datos de Habilidades O*NET (DuckDB)", expanded=True):
-        col_estado, col_boton = st.columns([3, 1])
-
-        if _hab_lista:
-            _con = _ddb2.connect(HAB_DB_PATH, read_only=True)
-            _n_sk  = _con.execute(f"SELECT COUNT(*) FROM {TABLA_SK}").fetchone()[0]
-            _n_kn  = _con.execute(f"SELECT COUNT(*) FROM {TABLA_KN}").fetchone()[0]
-            _n_occ = _con.execute(f"SELECT COUNT(*) FROM {TABLA_OCC}").fetchone()[0]
-            _con.close()
-            with col_estado:
-                st.caption(
-                    f"✅ Habilidades listas · "
-                    f"Skills: **{_n_sk:,}** · "
-                    f"Knowledge: **{_n_kn:,}** · "
-                    f"Ocupaciones: **{_n_occ:,}**"
-                )
-            with col_boton:
-                if st.button("🔄 Actualizar Habilidades", use_container_width=True, key="btn_hab_update"):
-                    _log = []
-                    with st.spinner("Descargando O*NET y actualizando tablas..."):
-                        try:
-                            habilidades_pipeline(log_fn=_log.append)
-                            st.cache_data.clear()
-                            st.success("✅ Habilidades actualizadas.")
-                        except Exception as _e:
-                            st.error(f"❌ Error: {_e}")
-                    with st.expander("Ver log"):
-                        st.text("\n".join(_log))
-                    st.rerun()
         else:
             with col_estado:
                 st.caption("❌ Tablas de habilidades no encontradas. Presiona **Crear Habilidades** para inicializarlas.")
