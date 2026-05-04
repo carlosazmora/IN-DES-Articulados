@@ -101,7 +101,7 @@ if seccion == "🏠 Panel de Actualización":
             con.close()
 
             with col_estado:
-                st.caption(f"✅ BD lista · **{n_filas:,} registros** · Última extracción: **{fecha_db}**")
+                st.caption(f"✅ DB lista · **{n_filas:,} registros** · Última extracción: **{fecha_db}**")
             
             with col_boton:
                 if st.button("🔄 Actualizar DB", use_container_width=True):
@@ -148,20 +148,13 @@ if seccion == "🏠 Panel de Actualización":
                     ejecutar_con_progreso(proceso, "Actualizando habilidades O*NET...")
         else:
             with col_estado:
-                st.caption("❌ Tablas de habilidades no encontradas. Presiona **Crear Habilidades** para inicializarlas.")
+                st.caption("❌ Tablas de habilidades no encontradas. Presiona **Consultar Habilidades** para inicializarlas.")
             with col_boton:
-                if st.button("🟢 Crear Habilidades", use_container_width=True, key="btn_hab_create"):
-                    _log = []
-                    with st.spinner("Descargando O*NET... (puede tardar ~1 min)"):
-                        try:
-                            habilidades_pipeline(log_fn=_log.append)
-                            st.cache_data.clear()
-                            st.success("✅ Tablas de habilidades creadas.")
-                        except Exception as _e:
-                            st.error(f"❌ Error: {_e}")
-                    with st.expander("Ver log"):
-                        st.text("\n".join(_log))
-                    st.rerun()
+                if st.button("🟢 Consultar Habilidades", use_container_width=True, key="btn_hab_create"):
+                    def proceso(log_fn):
+                        habilidades_pipeline(log_fn=log_fn)
+                        st.cache_data.clear()
+                    ejecutar_con_progreso(proceso, "Obteniendo habilidades O*NET...")
 
 # ==================== ANÁLISIS POR PROGRAMA ====================
 elif seccion == "🔎 Análisis por Programa":
