@@ -31,13 +31,13 @@ TABLA_KN  = "knowledge"
 TABLA_OCC = "ocupaciones"
 
 PALETTE = {
-    "bg":      "#0d1117",
-    "panel":   "#161b22",
-    "accent1": "#58a6ff",
-    "accent2": "#3fb950",
-    "accent3": "#f78166",
-    "text":    "#e6edf3",
-    "muted":   "#8b949e",
+    "bg":      "white",
+    "panel":   "#f6f8fa",
+    "accent1": "#1f77b4",   # azul
+    "accent2": "#2ca02c",   # verde
+    "accent3": "#d62728",   # rojo
+    "text":    "#1a1a2e",   # casi negro
+    "muted":   "#444444",   # gris oscuro
 }
 
 
@@ -221,10 +221,10 @@ def _base_fig(title: str, figsize=(14, 7)) -> tuple:
     fig.patch.set_facecolor(PALETTE["bg"])
     ax.set_facecolor(PALETTE["panel"])
     ax.set_title(title, color=PALETTE["text"], fontsize=14, fontweight="bold", pad=14)
-    ax.tick_params(colors=PALETTE["muted"], labelsize=9)
+    ax.tick_params(colors=PALETTE["text"], labelsize=9)
     for spine in ax.spines.values():
-        spine.set_edgecolor(PALETTE["panel"])
-    ax.grid(axis="x", color="#30363d", linewidth=0.6, linestyle="--")
+        spine.set_edgecolor("#cccccc")
+    ax.grid(axis="x", color="#dddddd", linewidth=0.6, linestyle="--")
     ax.set_axisbelow(True)
     return fig, ax
 
