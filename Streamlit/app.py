@@ -108,7 +108,8 @@ if seccion == "🏠 Panel Ejecutivo":
                     with st.expander("Ver log"):
                         st.text("\n".join(log_lines))
                     st.rerun()
-
+    from DatosInternacionales import DB_PATH ## borrable
+    st.info(f"Ruta del .duckdb: `{DB_PATH}`")  ## borrable
     st.divider()
 
 
