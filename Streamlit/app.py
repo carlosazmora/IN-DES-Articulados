@@ -82,7 +82,7 @@ seccion = st.sidebar.radio("Navegación", [
     "🎯 Habilidades",
     "📈 Tendencias e Insights",
     "💰 Variaciones Salariales",
-    "📊 Proyecciones"
+    "📊 Predicciones"
 ])
 
 st.sidebar.caption(f"{datetime.now().strftime('%d %b %Y')}")
@@ -96,7 +96,7 @@ if seccion == "🏠 Panel de Actualización":
     existe_bd    = bd_existe()
     existe_tabla = existe_bd and tabla_existe()
 
-    with st.expander("🦆 Gestión de base de datos Adzuna", expanded=True):
+    with st.expander("🔎 Gestión de base de datos Adzuna", expanded=True):
         col_estado, col_boton = st.columns([3, 1])
 
         if existe_bd and existe_tabla:
@@ -207,17 +207,37 @@ elif seccion == "💰 Variaciones Salariales":
     mostrar_variaciones_salariales()
 
 # ==================== PROYECCIONES ====================
-elif seccion == "📊 Proyecciones":
-    st.title("📊 Proyecciones Ocupacionales — BLS 2024–2034")
+elif seccion == "📊 Predicciones":
+    st.title("📊 Predicciones Ocupacionales — BLS 2024–2034")
 
     archivo = st.file_uploader(
-        "Sube el archivo de proyecciones (.xlsx)",
+        "Sube el archivo de predicciones (.xlsx)",
         type=["xlsx"],
+        accept_multiple_files=False,  # ← EXPLÍCITAMENTE: solo un archivo
         help="Usa el archivo occupation.xlsx del BLS Employment Projections Program.",
     )
 
     if archivo is None:
         st.info("⬆️ Sube el archivo Excel para comenzar el análisis.")
+
+        st.caption(
+    """
+        Guía de Navegación: Proyecciones Ocupacionales BLS
+
+        1.	Acceso inicial: Abra en su navegador el siguiente link: https://www.bls.gov/emp/tables.htm 
+        2.	Categoría de Ocupaciones: En la nueva pantalla, verás una lista organizada por categorías. Ubícate en el primer ítem titulado "Occupations" (Ocupaciones).
+        3.	Descarga Final: Dentro de esa sección, busca el enlace directo que dice: "All occupational tables in a single file (XLSX)" y suba el excel “occupations” a la página.
+        
+        En caso de que no le sirva el link anterior, haga lo siguiente: 
+        
+        1.	Acceso Inicial: Abre tu navegador y dirígete a la página principal del Bureau of Labor Statistics (bls.gov) https://www.bls.gov/ .
+        2.	Menú Principal: En la barra de navegación superior, haz clic en la pestaña "Subjects" (Temas).
+        3.	Selección de Área: Dentro del menú desplegable, busca “Subjects”, en el menú desplegable busque "Employment" (Empleo) y selecciona la opción "Employment Projections".
+        4.	Sección de Datos: Una vez en la página de predicciones, busca en el menú "EP Data" (Datos de Predicciones de Empleo) y posteriormente seleccione “Tables” (tablas).
+        5.	Categoría de Ocupaciones: En la nueva pantalla, verás una lista organizada por categorías. Ubícate en el primer ítem titulado "Occupations" (Ocupaciones).
+        6.	Descarga Final: Dentro de esa sección, busca el enlace directo que dice: "All occupational tables in a single file (XLSX)" y suba el excel “occupations” a la página.
+    """
+               )
     else:
         with st.spinner("Cargando datos..."):
             df11, df12, df13, df14, df15, df16 = cargar_proyecciones(archivo)
