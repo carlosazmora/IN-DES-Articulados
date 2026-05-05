@@ -1,2 +1,2 @@
-# IN-DES-Articulados
+# ObserLABOR
 Propuesta del equipo Articulados. IN-DES 2026-1
