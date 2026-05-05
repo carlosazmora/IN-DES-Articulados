@@ -1,26 +1,34 @@
 import sys
 import os
 import streamlit as st
-import pandas as pd
 import plotly.express as px
 from datetime import datetime
 from DatosInternacionales import (
-    mostrar_boton_actualizacion, get_analisis_completo, 
+    get_analisis_completo, 
     tabla_existe, bd_existe,
     funcion_creacion, funcion_actualizacion, DB_PATH, TABLA
 )
 from AnalisisPorPrograma import analizar_por_programa
 from VariacionesSalariales import mostrar_variaciones_salariales
 from Tendencias import mostrar_tendencias_e_insights
-from Habilidades import ( mostrar_habilidades, pipeline_datos, 
-    bd_tiene_datos, pipeline_datos as habilidades_pipeline,
-    bd_tiene_datos, DB_PATH as HAB_DB_PATH,
+from Habilidades import (
+    mostrar_habilidades, bd_tiene_datos, pipeline_datos as habilidades_pipeline,
+    DB_PATH as HAB_DB_PATH,
     TABLA_SK, TABLA_KN, TABLA_OCC
 )
 from Proyecciones import (
-    cargar_datos as cargar_proyecciones,grafico_mayor_proyeccion,    grafico_puestos_demandados,
-    grafico_tendencias_sector,    grafico_programas_riesgo,    grafico_salarios_sector,
-    grafico_salarios_educacion,    grafico_scatter_crecimiento,
+    cargar_datos as cargar_proyecciones,
+    grafico_mayor_proyeccion, grafico_puestos_demandados,
+    grafico_tendencias_sector, grafico_programas_riesgo,
+    grafico_salarios_sector, grafico_salarios_educacion,
+    grafico_scatter_crecimiento,
+)
+from Colombia import (
+    mostrar_colombia,
+    pipeline_datos as colombia_pipeline,
+    bd_tiene_datos as colombia_tiene_datos,
+    DB_PATH as CO_DB_PATH,
+    TABLA_CO,
 )
 
 import duckdb as _ddb2
@@ -28,12 +36,12 @@ import duckdb as _ddb
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-st.set_page_config(page_title="Observatorio Laboral Unisabana", layout="wide", page_icon="📊")
+st.set_page_config(page_title="ObserLABOR - Alumni Sabana", layout="wide", page_icon="📊")
 
-# ==================== NUEVA FUNCIÓN DE PROGRESO ====================
+# ==================== FUNCIÓN DE PROGRESO ====================
 def ejecutar_con_progreso(funcion_proceso, mensaje_inicial: str):
     """Ejecuta mostrando porcentaje real basado en logs tipo [x/total]"""
-    
+    import re
     status_text = st.empty()
     log_lines = []
     total = None
@@ -41,15 +49,11 @@ def ejecutar_con_progreso(funcion_proceso, mensaje_inicial: str):
     def log_callback(mensaje: str):
         nonlocal total
         log_lines.append(mensaje)
-
-        import re
         match = re.search(r"\[(\d+)/(\d+)\]", mensaje)
-
         if match:
             actual = int(match.group(1))
-            total = int(match.group(2))
+            total  = int(match.group(2))
             porcentaje = int((actual / total) * 100)
-
             status_text.markdown(f"### ⏳ {porcentaje}% completado")
         else:
             status_text.markdown("### ⏳ Procesando...")
@@ -57,23 +61,21 @@ def ejecutar_con_progreso(funcion_proceso, mensaje_inicial: str):
     try:
         with st.spinner(mensaje_inicial):
             funcion_proceso(log_fn=log_callback)
-
         status_text.markdown("### ✅ 100% completado")
-
         with st.expander("📋 Ver log completo"):
             st.text("\n".join(log_lines))
-
     except Exception as e:
         st.error(f"❌ Error: {str(e)}")
 
     st.rerun()
 
 # ==================== SIDEBAR ====================
-st.sidebar.title("📊 Observatorio Laboral")
+st.sidebar.title("📊 ObserLABOR - Alumni Sabana")
 
 seccion = st.sidebar.radio("Navegación", [
     "🏠 Panel de Actualización",
     "🔎 Análisis por Programa",
+    "🌺 Datos Nacionales",
     "🌍 Datos Internacionales",
     "🎯 Habilidades",
     "📈 Tendencias e Insights",
@@ -88,40 +90,32 @@ if seccion == "🏠 Panel de Actualización":
     st.title("🏠 Panel de Actualización")
     st.markdown("**Actualización de Datos del Observatorio Laboral**")
 
+    # --- DuckDB: Adzuna Internacional ---
     existe_bd    = bd_existe()
     existe_tabla = existe_bd and tabla_existe()
 
-    with st.expander("🦆 Gestión de base de datos (DuckDB)", expanded=True):
+    with st.expander("🦆 Gestión de base de datos Adzuna (DuckDB)", expanded=True):
         col_estado, col_boton = st.columns([3, 1])
 
         if existe_bd and existe_tabla:
             con = _ddb.connect(DB_PATH, read_only=True)
-            n_filas = con.execute(f"SELECT COUNT(*) FROM {TABLA}").fetchone()[0]
+            n_filas  = con.execute(f"SELECT COUNT(*) FROM {TABLA}").fetchone()[0]
             fecha_db = con.execute(f"SELECT MAX(fecha_extraccion) FROM {TABLA}").fetchone()[0]
             con.close()
-
             with col_estado:
                 st.caption(f"✅ DB lista · **{n_filas:,} registros** · Última extracción: **{fecha_db}**")
-            
             with col_boton:
                 if st.button("🔄 Actualizar DB", use_container_width=True):
                     ejecutar_con_progreso(funcion_actualizacion, "Actualizando base de datos...")
-
         else:
             with col_estado:
                 msg = "❌ Base de datos no encontrada." if not existe_bd else "❌ Tabla no encontrada."
                 st.caption(f"{msg} Presiona **Crear DB** para inicializarla.")
-            
             with col_boton:
                 if st.button("🟢 Crear DB", use_container_width=True):
                     ejecutar_con_progreso(funcion_creacion, "Creando base de datos...")
 
-    
-    
-
-    #### ====================================== HABILIDADES =============================================
     # --- DuckDB: Habilidades O*NET ---
-    
     _hab_lista = bd_tiene_datos()
 
     with st.expander("🎯 Gestión de datos de Habilidades O*NET (DuckDB)", expanded=True):
@@ -155,6 +149,40 @@ if seccion == "🏠 Panel de Actualización":
                         habilidades_pipeline(log_fn=log_fn)
                         st.cache_data.clear()
                     ejecutar_con_progreso(proceso, "Obteniendo habilidades O*NET...")
+
+    # --- DuckDB: Colombia LinkedIn ---
+    _co_lista = colombia_tiene_datos()
+
+    with st.expander("🌺 Gestión de datos Colombia — LinkedIn (DuckDB)", expanded=True):
+        col_estado, col_boton = st.columns([3, 1])
+
+        if _co_lista:
+            _con_co   = _ddb2.connect(CO_DB_PATH, read_only=True)
+            _n_co     = _con_co.execute(f"SELECT COUNT(*) FROM {TABLA_CO}").fetchone()[0]
+            _fecha_co = _con_co.execute(f"SELECT MAX(fecha_extraccion) FROM {TABLA_CO}").fetchone()[0]
+            _con_co.close()
+            with col_estado:
+                st.caption(f"✅ Colombia lista · **{_n_co:,} vacantes** · Última extracción: **{_fecha_co}**")
+            with col_boton:
+                if st.button("🔄 Actualizar LinkedIn", use_container_width=True, key="btn_co_update"):
+                    def proceso(log_fn):
+                        colombia_pipeline(log_fn=log_fn)
+                        st.cache_data.clear()
+                    ejecutar_con_progreso(proceso, "Scrapeando LinkedIn Colombia...")
+        else:
+            with col_estado:
+                st.caption("❌ Sin datos de Colombia. Presiona **Consultar LinkedIn** para inicializarlos.")
+            with col_boton:
+                if st.button("🟢 Consultar LinkedIn", use_container_width=True, key="btn_co_create"):
+                    def proceso(log_fn):
+                        colombia_pipeline(log_fn=log_fn)
+                        st.cache_data.clear()
+                    ejecutar_con_progreso(proceso, "Obteniendo vacantes LinkedIn Colombia...")
+
+# ==================== DATOS NACIONALES ====================
+elif seccion == "🌺 Datos Nacionales":
+    st.title("🌺 Vacantes en Colombia — LinkedIn")
+    mostrar_colombia()
 
 # ==================== ANÁLISIS POR PROGRAMA ====================
 elif seccion == "🔎 Análisis por Programa":
@@ -228,11 +256,6 @@ elif seccion == "📊 Proyecciones":
         st.caption("Cada punto es un sector. Tamaño = empleo total 2024.")
         grafico_scatter_crecimiento(df11, df12)
 
-# ==================== HABILIDADES ====================
-elif seccion == "🎯 Habilidades":
-    st.title("🎯 Habilidades y Conocimientos")
-    mostrar_habilidades()
-
 # ==================== DATOS INTERNACIONALES ====================
 elif seccion == "🌍 Datos Internacionales":
     st.title("🌍 Análisis Internacional - Adzuna")
@@ -264,4 +287,4 @@ elif seccion == "🌍 Datos Internacionales":
         st.dataframe(df_filtrado[["pais_nombre", "perfil", "vacantes"]],
                      use_container_width=True, hide_index=True)
 
-st.caption("Observatorio Laboral - Alumni Sabana")
+st.caption("ObserLABOR - Alumni Sabana")
