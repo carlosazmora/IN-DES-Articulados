@@ -319,7 +319,7 @@ def pipeline_datos(db_path: str = DB_PATH, log_fn=None) -> None:
 
     # ── API Key ──────────────────────────────────────────────────────────────
     try:
-        api_key = "8c8d73167a73421e4ea76038f0da4229996891d9c7ecc0fdd9ae7cf49cc9d4d2"
+        api_key = st.secrets["SERPAPI_KEY"]
     except (KeyError, FileNotFoundError):
         raise RuntimeError(
             "No se encontró SERPAPI_KEY en st.secrets.\n"
