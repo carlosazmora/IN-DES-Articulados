@@ -94,7 +94,7 @@ if seccion == "🏠 Panel de Actualización":
     existe_bd    = bd_existe()
     existe_tabla = existe_bd and tabla_existe()
 
-    with st.expander("🦆 Gestión de base de datos Adzuna (DuckDB)", expanded=True):
+    with st.expander("🦆 Gestión de base de datos Adzuna", expanded=True):
         col_estado, col_boton = st.columns([3, 1])
 
         if existe_bd and existe_tabla:
@@ -118,7 +118,7 @@ if seccion == "🏠 Panel de Actualización":
     # --- DuckDB: Habilidades O*NET ---
     _hab_lista = bd_tiene_datos()
 
-    with st.expander("🎯 Gestión de datos de Habilidades O*NET (DuckDB)", expanded=True):
+    with st.expander("🎯 Gestión de datos de Habilidades O*NET", expanded=True):
         col_estado, col_boton = st.columns([3, 1])
 
         if _hab_lista:
@@ -153,7 +153,7 @@ if seccion == "🏠 Panel de Actualización":
     # --- DuckDB: Colombia LinkedIn ---
     _co_lista = colombia_tiene_datos()
 
-    with st.expander("🌺 Gestión de datos Colombia — LinkedIn (DuckDB)", expanded=True):
+    with st.expander("🌺 Gestión de datos Colombia — LinkedIn", expanded=True):
         col_estado, col_boton = st.columns([3, 1])
 
         if _co_lista:
