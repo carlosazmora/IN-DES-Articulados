@@ -8,7 +8,6 @@ from DatosInternacionales import (
     tabla_existe, bd_existe,
     funcion_creacion, funcion_actualizacion, DB_PATH, TABLA
 )
-from AnalisisPorPrograma import analizar_por_programa
 from VariacionesSalariales import mostrar_variaciones_salariales
 from Tendencias import mostrar_tendencias_e_insights
 from Habilidades import (
@@ -76,7 +75,6 @@ st.sidebar.title("📊 ObserLABOR - Alumni Sabana")
 
 seccion = st.sidebar.radio("Navegación", [
     "🏠 Panel de Actualización",
-    "🔎 Análisis por Programa",
     "🌺 Datos Nacionales",
     "🌍 Datos Internacionales",
     "🎯 Habilidades",
@@ -186,11 +184,6 @@ if seccion == "🏠 Panel de Actualización":
 elif seccion == "🌺 Datos Nacionales":
     st.title("🌺 Vacantes en Colombia — Google Jobs")
     mostrar_colombia()
-
-# ==================== ANÁLISIS POR PROGRAMA ====================
-elif seccion == "🔎 Análisis por Programa":
-    st.title("🔎 Análisis por Programa Académico")
-    analizar_por_programa()
 
 # ==================== HABILIDADES ====================
 elif seccion == "🎯 Habilidades":
