@@ -2,7 +2,6 @@
 Habilidades.py
 ==============
 Módulo del Observatorio Laboral — Habilidades y Conocimientos O*NET.
-(Solo visualización - la actualización se gestiona desde app.py)
 """
 
 import requests
@@ -11,35 +10,26 @@ import io
 import re
 import os
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.figure as mfig
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import duckdb
 import streamlit as st
 from bs4 import BeautifulSoup
+import numpy as np
 
 
 # ============================================================
 # CONFIGURACIÓN
 # ============================================================
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "observatorio_laboral.duckdb")
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "habilidades_onet.duckdb")
 TABLA_SK  = "skills"
 TABLA_KN  = "knowledge"
 TABLA_OCC = "ocupaciones"
 
-PALETTE = {
-    "bg":      "white",
-    "panel":   "#f6f8fa",
-    "accent1": "#1f77b4",
-    "accent2": "#2ca02c",
-    "accent3": "#d62728",
-    "text":    "#1a1a2e",
-    "muted":   "#444444",
-}
-
 
 # ============================================================
-# PIPELINE DE DATOS (solo para uso interno desde app.py)
+# PIPELINE DE DATOS
 # ============================================================
 
 def pipeline_datos(db_path: str = DB_PATH, log_fn=None) -> None:
@@ -180,7 +170,7 @@ def _cargar_desde_db(db_path: str = DB_PATH):
 
 
 # ============================================================
-# FUNCIONES DE GRÁFICOS (retornan fig, no plt.show)
+# ESTILO VISUAL
 # ============================================================
 
 def _agregar(df: pd.DataFrame) -> pd.DataFrame:
@@ -194,277 +184,231 @@ def _agregar(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def _base_fig(title: str, figsize=(14, 7)) -> tuple:
-    fig, ax = plt.subplots(figsize=figsize)
-    fig.patch.set_facecolor(PALETTE["bg"])
-    ax.set_facecolor(PALETTE["panel"])
-    ax.set_title(title, color=PALETTE["text"], fontsize=14, fontweight="bold", pad=14)
-    ax.tick_params(colors=PALETTE["text"], labelsize=9)
-    for spine in ax.spines.values():
-        spine.set_edgecolor("#cccccc")
-    ax.grid(axis="x", color="#dddddd", linewidth=0.6, linestyle="--")
-    ax.set_axisbelow(True)
-    return fig, ax
+_C_SKILL  = "#1e40af"
+_C_KNOW   = "#166534"
+_FONT     = "Inter, Segoe UI, sans-serif"
 
-
-def fig_skills_top(df_skills: pd.DataFrame) -> mfig.Figure:
-    agg     = _agregar(df_skills).head(20)
-    fig, ax = _base_fig("Top 20 Skills más demandadas en O*NET", figsize=(14, 8))
-    bars    = ax.barh(
-        agg["Element Name"][::-1], agg["Promedio"][::-1],
-        color=PALETTE["accent1"], edgecolor="none", height=0.65,
-    )
-    for bar in bars:
-        ax.text(
-            bar.get_width() + 0.05, bar.get_y() + bar.get_height() / 2,
-            f"{bar.get_width():.2f}", va="center", ha="left",
-            color=PALETTE["muted"], fontsize=8,
+def _base_layout(title: str = None, height: int = 520, **kwargs) -> dict:
+    base = dict(
+        paper_bgcolor="#f8fafc",
+        plot_bgcolor="#f8fafc",
+        font=dict(family=_FONT, color="#111827", size=13),
+        title=dict(
+            text=title,
+            font=dict(size=20, color="#111827", family=_FONT),
+            x=0.5,
+            xanchor="center",
+            y=0.96
+        ),
+        margin=dict(l=25, r=25, t=70, b=60),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=13, color="#111827")
         )
-    ax.set_xlabel("Promedio del Data Value", color=PALETTE["muted"], fontsize=10)
-    ax.tick_params(axis="y", labelcolor=PALETTE["text"])
-    plt.tight_layout()
-    return fig
-
-
-def fig_knowledge_top(df_knowledge: pd.DataFrame) -> mfig.Figure:
-    agg     = _agregar(df_knowledge).head(20)
-    fig, ax = _base_fig("Top 20 Áreas de Conocimiento más demandadas en O*NET", figsize=(14, 8))
-    bars    = ax.barh(
-        agg["Element Name"][::-1], agg["Promedio"][::-1],
-        color=PALETTE["accent2"], edgecolor="none", height=0.65,
     )
-    for bar in bars:
-        ax.text(
-            bar.get_width() + 0.05, bar.get_y() + bar.get_height() / 2,
-            f"{bar.get_width():.2f}", va="center", ha="left",
-            color=PALETTE["muted"], fontsize=8,
-        )
-    ax.set_xlabel("Promedio del Data Value", color=PALETTE["muted"], fontsize=10)
-    ax.tick_params(axis="y", labelcolor=PALETTE["text"])
-    plt.tight_layout()
+    base.update(kwargs)
+    return base
+
+
+# ============================================================
+# GRÁFICOS
+# ============================================================
+
+def fig_skills_top(df_skills: pd.DataFrame) -> go.Figure:
+    agg = _agregar(df_skills).head(20)
+    fig = go.Figure(go.Bar(
+        x=agg["Promedio"], y=agg["Element Name"], orientation="h",
+        marker=dict(color="#3b82f6", line=dict(color="white", width=1), cornerradius=6),
+        text=[f"{v:.2f}" for v in agg["Promedio"]],
+        textposition="inside", insidetextanchor="end", textfont=dict(size=13, color="white"),
+        hovertemplate="<b>%{y}</b><br>Promedio: <b>%{x:.2f}</b><extra></extra>",
+    ))
+    fig.update_layout(**_base_layout("Top 20 Skills más demandadas según O*NET", height=650))
+    fig.update_xaxes(title="Promedio O*NET (0-5)", title_font=dict(size=14, color="#1f2937"), showgrid=True, gridcolor="#e2e8f0")
+    fig.update_yaxes(autorange="reversed", tickfont=dict(size=13.5, color="#1f2937"))
     return fig
 
 
-def fig_skills_dist(df_skills: pd.DataFrame) -> mfig.Figure:
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    fig.patch.set_facecolor(PALETTE["bg"])
-    fig.suptitle("Distribución de Skills por Escala O*NET", 
-                 color=PALETTE["text"], fontsize=14, fontweight="bold")
-
-    escalas = {
-        "IM": ("Importancia (1–5)\n¿Qué tan importante es esta skill?", PALETTE["accent1"]),
-        "LV": ("Nivel requerido (0–7)\n¿Qué nivel se necesita?",         PALETTE["accent1"]),
-    }
-
-    for ax, (scale_id, (descripcion, color)) in zip(axes, escalas.items()):
-        vals = df_skills[df_skills["Scale ID"] == scale_id]["Data Value"].dropna()
-        ax.set_facecolor(PALETTE["panel"])
-        ax.hist(vals, bins=30, color=color, edgecolor=PALETTE["bg"], linewidth=0.4)
-        ax.set_title(f"Scale ID = {scale_id}", color=PALETTE["text"], fontsize=11, fontweight="bold")
-        ax.set_xlabel(descripcion, color=PALETTE["muted"], fontsize=9)
-        ax.set_ylabel("Frecuencia",  color=PALETTE["muted"], fontsize=9)
-        ax.tick_params(axis="both", labelcolor=PALETTE["muted"])
-        ax.grid(axis="y", color="#dddddd", linewidth=0.5, linestyle="--")
-        for spine in ax.spines.values():
-            spine.set_edgecolor("#cccccc")
-
-    plt.tight_layout()
+def fig_knowledge_top(df_knowledge: pd.DataFrame) -> go.Figure:
+    agg = _agregar(df_knowledge).head(20)
+    fig = go.Figure(go.Bar(
+        x=agg["Promedio"], y=agg["Element Name"], orientation="h",
+        marker=dict(color="#10b981", line=dict(color="white", width=1), cornerradius=6),
+        text=[f"{v:.2f}" for v in agg["Promedio"]],
+        textposition="inside", insidetextanchor="end", textfont=dict(size=13, color="white"),
+        hovertemplate="<b>%{y}</b><br>Promedio: <b>%{x:.2f}</b><extra></extra>",
+    ))
+    fig.update_layout(**_base_layout("Top 20 Áreas de Conocimiento más demandadas", height=650))
+    fig.update_xaxes(title="Promedio O*NET (0-5)", title_font=dict(size=14, color="#1f2937"), showgrid=True, gridcolor="#e2e8f0")
+    fig.update_yaxes(autorange="reversed", tickfont=dict(size=13.5, color="#1f2937"))
     return fig
 
 
-def fig_knowledge_dist(df_knowledge: pd.DataFrame) -> mfig.Figure:
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    fig.patch.set_facecolor(PALETTE["bg"])
-    fig.suptitle("Distribución de Knowledge por Escala O*NET",
-                 color=PALETTE["text"], fontsize=14, fontweight="bold")
-
-    escalas = {
-        "IM": ("Importancia (1–5)\n¿Qué tan importante es esta área?", PALETTE["accent2"]),
-        "LV": ("Nivel requerido (0–7)\n¿Qué nivel se necesita?",        PALETTE["accent2"]),
-    }
-
-    for ax, (scale_id, (descripcion, color)) in zip(axes, escalas.items()):
-        vals = df_knowledge[df_knowledge["Scale ID"] == scale_id]["Data Value"].dropna()
-        ax.set_facecolor(PALETTE["panel"])
-        ax.hist(vals, bins=30, color=color, edgecolor=PALETTE["bg"], linewidth=0.4)
-        ax.set_title(f"Scale ID = {scale_id}", color=PALETTE["text"], fontsize=11, fontweight="bold")
-        ax.set_xlabel(descripcion, color=PALETTE["muted"], fontsize=9)
-        ax.set_ylabel("Frecuencia",  color=PALETTE["muted"], fontsize=9)
-        ax.tick_params(axis="both", labelcolor=PALETTE["muted"])
-        ax.grid(axis="y", color="#dddddd", linewidth=0.5, linestyle="--")
-        for spine in ax.spines.values():
-            spine.set_edgecolor("#cccccc")
-
-    plt.tight_layout()
+def fig_importancia_skills(df_skills: pd.DataFrame) -> go.Figure:
+    """Gráfico específico para distribución de importancia de Skills"""
+    vals_sk = df_skills[df_skills["Scale ID"] == "IM"]["Data Value"].dropna()
+    
+    fig = go.Figure()
+    fig.add_trace(go.Histogram(
+        x=vals_sk, nbinsx=25, name="Skills", 
+        marker_color=_C_SKILL, opacity=0.85, 
+        hovertemplate="Importancia: %{x}<br>Frecuencia: %{y}<extra></extra>"
+    ))
+    
+    media = vals_sk.mean()
+    fig.add_vline(x=media, line_width=2.5, line_dash="dash", line_color=_C_SKILL,
+                  annotation_text=f"Media: {media:.2f}", annotation_position="top")
+    
+    fig.update_layout(**_base_layout("Distribución de Importancia — Skills", height=480))
+    fig.update_xaxes(title="Nivel de Importancia (1-5)", title_font=dict(size=14, color="#1f2937"), 
+                     showgrid=True, gridcolor="#e2e8f0", range=[0.5, 5.5])
+    fig.update_yaxes(title="Frecuencia", title_font=dict(size=14, color="#1f2937"), 
+                     showgrid=True, gridcolor="#e2e8f0")
     return fig
 
 
-def fig_ocupaciones(df_occ: pd.DataFrame) -> mfig.Figure | None:
+def fig_importancia_knowledge(df_knowledge: pd.DataFrame) -> go.Figure:
+    """Gráfico específico para distribución de importancia de Knowledge"""
+    vals_kn = df_knowledge[df_knowledge["Scale ID"] == "IM"]["Data Value"].dropna()
+    
+    fig = go.Figure()
+    fig.add_trace(go.Histogram(
+        x=vals_kn, nbinsx=25, name="Knowledge", 
+        marker_color=_C_KNOW, opacity=0.85,
+        hovertemplate="Importancia: %{x}<br>Frecuencia: %{y}<extra></extra>"
+    ))
+    
+    media = vals_kn.mean()
+    fig.add_vline(x=media, line_width=2.5, line_dash="dash", line_color=_C_KNOW,
+                  annotation_text=f"Media: {media:.2f}", annotation_position="top")
+    
+    fig.update_layout(**_base_layout("Distribución de Importancia — Knowledge", height=480))
+    fig.update_xaxes(title="Nivel de Importancia (1-5)", title_font=dict(size=14, color="#1f2937"),
+                     showgrid=True, gridcolor="#e2e8f0", range=[0.5, 5.5])
+    fig.update_yaxes(title="Frecuencia", title_font=dict(size=14, color="#1f2937"), 
+                     showgrid=True, gridcolor="#e2e8f0")
+    return fig
+
+
+def fig_ocupaciones(df_occ: pd.DataFrame) -> go.Figure | None:
     if "O*NET-SOC Code" not in df_occ.columns:
         return None
-    df             = df_occ.copy()
-    df["Grupo"]    = df["O*NET-SOC Code"].astype(str).str[:2]
-    conteo         = df["Grupo"].value_counts().head(20).reset_index()
+    df = df_occ.copy()
+    df["Grupo"] = df["O*NET-SOC Code"].astype(str).str[:2]
+    conteo = df["Grupo"].value_counts().head(20).reset_index()
     conteo.columns = ["Grupo SOC", "Cantidad"]
-    fig, ax        = _base_fig("Top 20 Grupos Ocupacionales (por código SOC)", figsize=(12, 6))
-    bars           = ax.bar(
-        conteo["Grupo SOC"], conteo["Cantidad"],
-        color=PALETTE["accent3"], edgecolor="none", width=0.6,
-    )
-    for bar in bars:
-        ax.text(
-            bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
-            str(int(bar.get_height())), ha="center", va="bottom",
-            color=PALETTE["muted"], fontsize=8,
-        )
-    ax.set_xlabel("Código de grupo SOC (2 dígitos)", color=PALETTE["muted"], fontsize=10)
-    ax.set_ylabel("Nº de ocupaciones",               color=PALETTE["muted"], fontsize=10)
-    ax.tick_params(axis="both", labelcolor=PALETTE["muted"])
-    plt.tight_layout()
+    conteo = conteo.sort_values("Cantidad", ascending=True)
+
+    fig = go.Figure(go.Bar(
+        x=conteo["Cantidad"], y=conteo["Grupo SOC"], orientation="h",
+        marker=dict(color="#8b5cf6", line=dict(color="white", width=1), cornerradius=6),
+        text=conteo["Cantidad"].astype(str),
+        textposition="inside", insidetextanchor="end",
+    ))
+    fig.update_layout(**_base_layout("Distribución de Ocupaciones por Grupo SOC", height=580))
+    fig.update_xaxes(title="Cantidad de Ocupaciones", title_font=dict(size=14, color="#1f2937"), showgrid=True, gridcolor="#e2e8f0")
+    fig.update_yaxes(tickfont=dict(size=13.5, color="#1f2937"), showgrid=False)
+    return fig
+
+
+def fig_scatter_skills_vs_knowledge(df_skills: pd.DataFrame, df_knowledge: pd.DataFrame) -> go.Figure | None:
+    sk_agg = _agregar(df_skills).head(30).reset_index(drop=True)
+    kn_agg = _agregar(df_knowledge).head(30).reset_index(drop=True)
+    if sk_agg.empty and kn_agg.empty:
+        return None
+
+    fig = go.Figure()
+    for df_agg, name, color, symbol in [(sk_agg, "Skills", _C_SKILL, "circle"), (kn_agg, "Knowledge", _C_KNOW, "diamond")]:
+        rankings = list(range(1, len(df_agg) + 1))
+        fig.add_trace(go.Scatter(
+            x=rankings, y=df_agg["Promedio"], mode="markers",
+            name=name, marker=dict(color=color, size=12, symbol=symbol, line=dict(color="white", width=1.5)),
+            text=df_agg["Element Name"],
+            hovertemplate="<b>%{text}</b><br>Ranking: %{x}°<br>Promedio: <b>%{y:.2f}</b><extra></extra>",
+        ))
+
+    fig.update_layout(**_base_layout("Comparación Skills vs Knowledge (Top 30)", height=520))
+    fig.update_xaxes(title="Ranking (1 = más importante)", title_font=dict(size=14, color="#1f2937"), tickfont=dict(size=13, color="#1f2937"), showgrid=True, gridcolor="#e2e8f0", dtick=5)
+    fig.update_yaxes(title="Promedio O*NET", title_font=dict(size=14, color="#1f2937"), tickfont=dict(size=13, color="#1f2937"), showgrid=True, gridcolor="#e2e8f0")
     return fig
 
 
 def _tabla_soc_referencia() -> pd.DataFrame:
-    """Tabla de referencia de los grupos ocupacionales SOC (2 dígitos)."""
     return pd.DataFrame([
-        ("11", "Gerencia y Dirección",                         "CEOs, gerentes, administradores de empresas"),
-        ("13", "Negocios y Finanzas",                          "Analistas financieros, contadores, auditores"),
-        ("15", "Computación y Matemáticas",                    "Programadores, científicos de datos, ingenieros de software"),
-        ("17", "Arquitectura e Ingeniería",                    "Ingenieros civiles, mecánicos, eléctricos, arquitectos"),
-        ("19", "Ciencias Naturales y Sociales",                "Biólogos, químicos, economistas, psicólogos"),
-        ("21", "Servicios Sociales y Comunitarios",            "Trabajadores sociales, consejeros, orientadores"),
-        ("23", "Derecho y Jurídica",                           "Abogados, jueces, paralegales"),
-        ("25", "Educación y Bibliotecología",                  "Docentes, profesores universitarios, bibliotecarios"),
-        ("27", "Arte, Diseño y Medios",                        "Diseñadores gráficos, músicos, periodistas, actores"),
-        ("29", "Salud — Profesionales",                        "Médicos, enfermeras, farmacéuticos, dentistas"),
-        ("31", "Salud — Técnicos y Asistentes",                "Auxiliares de enfermería, técnicos de laboratorio"),
-        ("33", "Seguridad y Protección",                       "Policías, bomberos, guardas de seguridad"),
-        ("35", "Preparación y Servicio de Alimentos",          "Chefs, cocineros, meseros, bartenders"),
-        ("37", "Mantenimiento de Edificios y Espacios",        "Conserjes, jardineros, personal de limpieza"),
-        ("39", "Cuidado Personal y Servicios",                 "Estilistas, cuidadores, entrenadores personales"),
-        ("41", "Ventas",                                       "Vendedores, representantes comerciales, agentes"),
-        ("43", "Soporte Administrativo y de Oficina",          "Secretarias, recepcionistas, operadores de datos"),
-        ("45", "Agricultura, Pesca y Forestal",                "Agricultores, pescadores, trabajadores forestales"),
-        ("47", "Construcción y Extracción",                    "Albañiles, electricistas, mineros, soldadores"),
-        ("49", "Instalación y Reparación",                     "Técnicos de mantenimiento, mecánicos, electricistas"),
-        ("51", "Producción e Industria",                       "Operadores de maquinaria, ensambladores, inspectores de calidad"),
-        ("53", "Transporte y Logística",                       "Conductores, pilotos, operadores de grúas, despachadores"),
-        ("55", "Fuerzas Militares",                            "Personal militar de todas las ramas"),
-    ], columns=["Código SOC", "Grupo Ocupacional", "Ejemplos de ocupaciones"])
-
-
-def fig_scatter_skills_vs_knowledge(
-    df_skills: pd.DataFrame, df_knowledge: pd.DataFrame
-) -> mfig.Figure | None:
-    sk_agg = _agregar(df_skills).rename(columns={"Promedio": "Skill"})
-    kn_agg = _agregar(df_knowledge).rename(columns={"Promedio": "Knowledge"})
-    merged = sk_agg.merge(kn_agg, on="Element Name", how="inner")
-    if merged.empty:
-        return None
-    fig, ax = _base_fig("Skills vs Knowledge — Elementos en común", figsize=(10, 7))
-    sc = ax.scatter(
-        merged["Skill"], merged["Knowledge"],
-        c=merged["Skill"] + merged["Knowledge"],
-        cmap="cool", s=60, alpha=0.8, edgecolors="none",
-    )
-    cbar = fig.colorbar(sc, ax=ax)
-    cbar.ax.yaxis.set_tick_params(color=PALETTE["muted"])
-    cbar.outline.set_edgecolor(PALETTE["panel"])
-    plt.setp(plt.getp(cbar.ax.axes, "yticklabels"), color=PALETTE["muted"])
-    for _, row in merged.nlargest(5, "Skill").iterrows():
-        ax.annotate(
-            row["Element Name"], (row["Skill"], row["Knowledge"]),
-            textcoords="offset points", xytext=(6, 4),
-            color=PALETTE["text"], fontsize=7,
-        )
-    ax.set_xlabel("Promedio Skill",     color=PALETTE["muted"], fontsize=10)
-    ax.set_ylabel("Promedio Knowledge", color=PALETTE["muted"], fontsize=10)
-    ax.tick_params(axis="both", labelcolor=PALETTE["muted"])
-    plt.tight_layout()
-    return fig
+        ("11", "Gerencia y Dirección", "CEOs, gerentes, administradores"),
+        ("13", "Negocios y Finanzas", "Analistas, contadores, auditores"),
+        ("15", "Computación y Matemáticas", "Programadores, científicos de datos"),
+        ("17", "Arquitectura e Ingeniería", "Ingenieros de todo tipo"),
+        ("19", "Ciencias Naturales y Sociales", "Biólogos, economistas, psicólogos"),
+        ("29", "Salud — Profesionales", "Médicos, enfermeras, farmacéuticos"),
+        ("41", "Ventas", "Vendedores y representantes comerciales"),
+        ("47", "Construcción", "Albañiles, electricistas, soldadores"),
+    ], columns=["Código SOC", "Grupo Ocupacional", "Ejemplos"])
 
 
 # ============================================================
-# SECCIÓN STREAMLIT PRINCIPAL (SOLO VISUALIZACIÓN)
+# SECCIÓN STREAMLIT CON KEYS ÚNICOS
 # ============================================================
 
 def mostrar_habilidades() -> None:
-    """Muestra solo la visualización de habilidades sin controles de actualización"""
+    st.markdown("### Análisis de Habilidades y Conocimientos O*NET")
+    st.markdown("Datos actualizados de la base de datos **O\*NET** de EE.UU.")
     
-    st.markdown("Análisis de habilidades y áreas de conocimiento más demandadas según la base de datos **O*NET** (EE.UU.).")
-    
-    # Mostrar estado de los datos (solo informativo, sin botones)
     if bd_tiene_datos():
         con = duckdb.connect(DB_PATH, read_only=True)
         n_sk = con.execute(f"SELECT COUNT(*) FROM {TABLA_SK}").fetchone()[0]
         n_kn = con.execute(f"SELECT COUNT(*) FROM {TABLA_KN}").fetchone()[0]
         n_occ = con.execute(f"SELECT COUNT(*) FROM {TABLA_OCC}").fetchone()[0]
         con.close()
-        
-        st.info(f"📊 Datos O*NET cargados · Skills: **{n_sk:,}** · Knowledge: **{n_kn:,}** · Ocupaciones: **{n_occ:,}**")
-        st.caption("💡 Para actualizar estos datos, ve al **Panel de Actualización** en el menú principal.")
+        st.success(f"✅ Datos cargados: **{n_sk:,}** skills • **{n_kn:,}** knowledge • **{n_occ:,}** ocupaciones")
     else:
-        st.warning("⚠️ No hay datos de O*NET cargados. Ve al **Panel de Actualización** y presiona 'Crear Habilidades' para inicializarlos.")
+        st.error("❌ No hay datos cargados. Ve al Panel de Actualización.")
         return
 
     df_sk, df_kn, df_occ = _cargar_desde_db()
 
-    # ── Tabs de visualización ─────────────────────────────────
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "🔵 Top Skills",
-        "🟢 Top Knowledge",
-        "📊 Dist. Skills",
-        "📊 Dist. Knowledge",
-        "🏢 Ocupaciones",
-        "🔀 Skills vs Knowledge",
+        "🔵 Top Skills", 
+        "🟢 Top Knowledge", 
+        "📊 Importancia Skills", 
+        "📊 Importancia Knowledge",
+        "🏢 Ocupaciones", 
+        "🔀 Skills vs Knowledge"
     ])
 
     with tab1:
-        st.subheader("Top 20 Skills más demandadas")
-        fig = fig_skills_top(df_sk)
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
+        st.plotly_chart(fig_skills_top(df_sk), use_container_width=True, key="fig_skills_top")
+        st.caption("**Top 20 Habilidades más demandadas.** Muestra las habilidades que tienen mayor puntaje promedio de importancia en miles de ocupaciones analizadas por O*NET.")
 
     with tab2:
-        st.subheader("Top 20 Áreas de Conocimiento más demandadas")
-        fig = fig_knowledge_top(df_kn)
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
+        st.plotly_chart(fig_knowledge_top(df_kn), use_container_width=True, key="fig_knowledge_top")
+        st.caption("**Top 20 Áreas de Conocimiento más demandadas.** Muestra los conocimientos teóricos más valorados en el mercado laboral estadounidense.")
 
     with tab3:
-        st.subheader("Distribución de valores — Skills")
-        fig = fig_skills_dist(df_sk)
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
+        st.plotly_chart(fig_importancia_skills(df_sk), use_container_width=True, key="fig_importancia_skills")
+        st.caption("**Distribución de la importancia de las Skills.** Muestra qué tan importantes se consideran las habilidades en general (escala 1 a 5). La línea punteada muestra el valor promedio.")
 
     with tab4:
-        st.subheader("Distribución de valores — Knowledge")
-        fig = fig_knowledge_dist(df_kn)
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
+        st.plotly_chart(fig_importancia_knowledge(df_kn), use_container_width=True, key="fig_importancia_knowledge")
+        st.caption("**Distribución de la importancia de los Knowledge.** Muestra qué tan importantes se consideran los conocimientos teóricos (escala 1 a 5). La línea punteada muestra el valor promedio.")
 
     with tab5:
-        st.subheader("Grupos Ocupacionales (código SOC)")
-        fig = fig_ocupaciones(df_occ)
-        if fig:
-            st.pyplot(fig, use_container_width=True)
-            plt.close(fig)
-        else:
-            st.warning("No se encontró la columna 'O*NET-SOC Code' en los datos.")
-
+        fig_occ = fig_ocupaciones(df_occ)
+        if fig_occ:
+            st.plotly_chart(fig_occ, use_container_width=True, key="fig_ocupaciones")
+        st.caption("**Distribución de ocupaciones por gran grupo.** Muestra cuántas ocupaciones diferentes existen en cada categoría principal según el sistema SOC.")
         st.divider()
-        st.markdown("#### 📋 Referencia de Códigos SOC")
-        st.dataframe(
-            _tabla_soc_referencia(),
-            use_container_width=True,
-            hide_index=True,
-        )
+        st.subheader("📋 Referencia de Grupos Ocupacionales (SOC)")
+        st.dataframe(_tabla_soc_referencia(), use_container_width=True, hide_index=True)
 
     with tab6:
-        st.subheader("Skills vs Knowledge — correlación de promedios")
-        fig = fig_scatter_skills_vs_knowledge(df_sk, df_kn)
-        if fig:
-            st.pyplot(fig, use_container_width=True)
-            plt.close(fig)
+        fig_scatter = fig_scatter_skills_vs_knowledge(df_sk, df_kn)
+        if fig_scatter:
+            st.plotly_chart(fig_scatter, use_container_width=True, key="fig_scatter_skills_knowledge")
+            st.caption("**Comparación entre Skills y Knowledge.** Cada punto representa una habilidad o conocimiento. El ranking 1 es el más importante.")
         else:
-            st.warning("Sin elementos comunes entre Skills y Knowledge.")
+            st.warning("No hay suficientes datos para esta gráfica.")

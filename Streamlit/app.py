@@ -12,7 +12,9 @@ from AnalisisPorPrograma import analizar_por_programa
 from VariacionesSalariales import mostrar_variaciones_salariales
 from Tendencias import mostrar_tendencias_e_insights
 from Habilidades import (
-    mostrar_habilidades, bd_tiene_datos, pipeline_datos as habilidades_pipeline,
+    mostrar_habilidades,
+    pipeline_datos as habilidades_pipeline,
+    bd_tiene_datos,
     DB_PATH as HAB_DB_PATH,
     TABLA_SK, TABLA_KN, TABLA_OCC
 )
