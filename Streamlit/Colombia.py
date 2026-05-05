@@ -1,13 +1,17 @@
 """
 Colombia.py
 ===========
-Módulo del Observatorio Laboral — Vacantes LinkedIn Colombia.
+Módulo del Observatorio Laboral — Vacantes Google Jobs Colombia.
 
 Flujo de datos:
-  jobspy.scrape_jobs()  →  DataFrame en memoria  →  DuckDB (tabla 'colombia_vacantes')
+  SerpAPI (Google Jobs engine)  →  DataFrame en memoria  →  DuckDB (tabla 'colombia_vacantes')
 
 La tabla se guarda directamente desde el DataFrame, sin parquet.
 La actualización se gestiona desde app.py (Panel de Actualización).
+
+REQUISITO: Clave de SerpAPI en st.secrets["SERPAPI_KEY"].
+  → Free tier: 100 búsquedas/mes → ~7 ejecuciones completas/mes.
+  → Registro gratuito en https://serpapi.com
 """
 
 import re
@@ -20,7 +24,7 @@ import duckdb
 import streamlit as st
 from collections import Counter
 from datetime import datetime
-
+# pip install google-search-results serpapi
 # ============================================================
 # CONFIGURACIÓN
 # ============================================================
@@ -30,57 +34,79 @@ TABLA_CO  = "colombia_vacantes"
 
 PERFILES = [
     # TI & Datos
-    "data",
-    "developer",
+    "data scientist Colombia",
+    "analista de datos Colombia",
+    "desarrollador de software Colombia",
+    "ingeniero de software Colombia",
     # Ingeniería
-    "ingeniero",
-    "industrial",
-    "ingeniero mecanico",
+    "ingeniero industrial Colombia",
+    "ingeniero mecánico Colombia",
+    "ingeniero de producción Colombia",
     # Derecho
-    "derecho",
+    "abogado Colombia",
+    "asesor jurídico Colombia",
     # Salud
-    "medicina",
-    "enfermeria",
-    "psicologia",
+    "médico Colombia",
+    "enfermero Colombia",
+    "psicólogo Colombia",
     # Negocio & Gestión
-    "business analyst",
-    "project manager",
+    "business analyst Colombia",
+    "project manager Colombia",
+    "gerente de operaciones Colombia",
     # Marketing
-    "marketing",
+    "marketing digital Colombia",
+    "community manager Colombia",
     # Finanzas
-    "finantial",
+    "analista financiero Colombia",
+    "contador Colombia",
 ]
 
+# Clave interna: strip " Colombia" para el matching en títulos
+_strip_co = lambda s: re.sub(r"\s+colombia\s*$", "", s.strip(), flags=re.IGNORECASE).strip()
+_CLAVE = {p: _strip_co(p) for p in PERFILES}
+
 PERFILES_ES = {
-    "data":             "Datos / BI",
-    "developer":        "Developer",
-    "ingeniero":        "Ingeniero",
-    "industrial":       "Ing. Industrial",
-    "ingeniero mecanico": "Ing. Mecánico",
-    "derecho":          "Derecho",
-    "medicina":         "Medicina",
-    "enfermeria":       "Enfermería",
-    "psicologia":       "Psicología",
-    "business analyst": "Analista de Negocio",
-    "project manager":  "Gerente de Proyectos",
-    "marketing":        "Marketing",
-    "finantial":        "Finanzas",
+    "data scientist Colombia":           "Datos / BI",
+    "analista de datos Colombia":        "Datos / BI",
+    "desarrollador de software Colombia":"Developer",
+    "ingeniero de software Colombia":    "Developer",
+    "ingeniero industrial Colombia":     "Ing. Industrial",
+    "ingeniero mecánico Colombia":       "Ing. Mecánico",
+    "ingeniero de producción Colombia":  "Ing. Producción",
+    "abogado Colombia":                  "Derecho",
+    "asesor jurídico Colombia":          "Derecho",
+    "médico Colombia":                   "Medicina",
+    "enfermero Colombia":                "Enfermería",
+    "psicólogo Colombia":                "Psicología",
+    "business analyst Colombia":         "Analista de Negocio",
+    "project manager Colombia":          "Gerente de Proyectos",
+    "gerente de operaciones Colombia":   "Gerente Operaciones",
+    "marketing digital Colombia":        "Marketing",
+    "community manager Colombia":        "Marketing",
+    "analista financiero Colombia":      "Finanzas",
+    "contador Colombia":                 "Finanzas",
 }
 
 CATEGORIA_PERFIL = {
-    "data":             "TI & Datos",
-    "developer":        "TI & Datos",
-    "ingeniero":        "Ingeniería",
-    "industrial":       "Ingeniería",
-    "ingeniero mecanico": "Ingeniería",
-    "derecho":          "Derecho",
-    "medicina":         "Salud",
-    "enfermeria":       "Salud",
-    "psicologia":       "Salud",
-    "business analyst": "Negocio & Gestión",
-    "project manager":  "Negocio & Gestión",
-    "marketing":        "Marketing",
-    "finantial":        "Finanzas",
+    "data scientist Colombia":           "TI & Datos",
+    "analista de datos Colombia":        "TI & Datos",
+    "desarrollador de software Colombia":"TI & Datos",
+    "ingeniero de software Colombia":    "TI & Datos",
+    "ingeniero industrial Colombia":     "Ingeniería",
+    "ingeniero mecánico Colombia":       "Ingeniería",
+    "ingeniero de producción Colombia":  "Ingeniería",
+    "abogado Colombia":                  "Derecho",
+    "asesor jurídico Colombia":          "Derecho",
+    "médico Colombia":                   "Salud",
+    "enfermero Colombia":                "Salud",
+    "psicólogo Colombia":                "Salud",
+    "business analyst Colombia":         "Negocio & Gestión",
+    "project manager Colombia":          "Negocio & Gestión",
+    "gerente de operaciones Colombia":   "Negocio & Gestión",
+    "marketing digital Colombia":        "Marketing",
+    "community manager Colombia":        "Marketing",
+    "analista financiero Colombia":      "Finanzas",
+    "contador Colombia":                 "Finanzas",
 }
 
 PALETTE = {
@@ -133,9 +159,154 @@ COMP_BLANDAS = {
 # PIPELINE DE DATOS  (llamado desde app.py)
 # ============================================================
 
+def _parse_date_posted(posted_at: str) -> str | None:
+    """
+    Convierte strings relativos de SerpAPI ("3 days ago", "2 weeks ago")
+    a fechas absolutas en formato YYYY-MM-DD.
+    """
+    from datetime import timedelta
+    if not posted_at or posted_at == "nan":
+        return None
+    s = str(posted_at).lower().strip()
+    today = datetime.now().date()
+    try:
+        if any(x in s for x in ("just now", "today", "hour", "minute")):
+            return str(today)
+        m = re.search(r"(\d+)\s+day", s)
+        if m:
+            return str(today - timedelta(days=int(m.group(1))))
+        m = re.search(r"(\d+)\s+week", s)
+        if m:
+            return str(today - timedelta(weeks=int(m.group(1))))
+        m = re.search(r"(\d+)\s+month", s)
+        if m:
+            return str(today - timedelta(days=int(m.group(1)) * 30))
+        if "a month" in s or "one month" in s:
+            return str(today - timedelta(days=30))
+    except Exception:
+        pass
+    return None
+
+
+def _parse_salary(salary_str: str) -> tuple[float | None, float | None, str]:
+    """
+    Extrae (min_amount, max_amount, currency) de strings como
+    'COP 3,000,000 a month' o '$2,000 - $3,000 a month'.
+    """
+    if not salary_str or salary_str == "nan":
+        return None, None, ""
+    s = str(salary_str).replace(",", "").replace(".", "")
+    currency = "COP" if "cop" in s.lower() or "cop" in s else (
+               "USD" if "$" in s else "")
+    nums = re.findall(r"\d+", s)
+    if not nums:
+        return None, None, currency
+    nums = [float(n) for n in nums if float(n) > 100]
+    if not nums:
+        return None, None, currency
+    return nums[0], nums[-1] if len(nums) > 1 else nums[0], currency
+
+
+def _serpapi_scrape_perfil(query: str, api_key: str,
+                            pages: int = 3, log=None) -> list[dict]:
+    """
+    Consulta Google Jobs vía SerpAPI para una query dada.
+
+    Estrategia multi-ciudad: lanza la query en 4 ciudades colombianas
+    con strings de ubicación validados por SerpAPI (sin tildes).
+    Deduplica resultados por job_id.
+    Retry automático en la primera petición para manejar cold-start DNS.
+    """
+    try:
+        from serpapi import GoogleSearch
+    except ImportError:
+        raise ImportError(
+            "google-search-results no está instalado. "
+            "Ejecuta: pip install google-search-results"
+        )
+
+    import time
+
+    # Strings exactos validados en la BD de ubicaciones de SerpAPI
+    # IMPORTANTE: sin tildes — "Bogotá" o "Colombia" genérico no se resuelven
+    LOCATIONS = [
+        "Bogota, Bogota, Colombia",
+        "Medellin, Antioquia, Colombia",
+        "Cali, Valle del Cauca, Colombia",
+        "Barranquilla, Atlantico, Colombia",
+    ]
+
+    seen_ids: set[str] = set()
+    all_rows: list[dict] = []
+
+    for loc in LOCATIONS:
+        for page in range(pages):
+            params = {
+                "engine":   "google_jobs",
+                "q":        query,
+                "location": loc,
+                "hl":       "es",
+                "gl":       "co",
+                "chips":    "date_posted:month",
+                "start":    page * 10,
+                "api_key":  api_key,
+            }
+
+            # Retry x2 para manejar cold-start de conexión
+            result = None
+            for attempt in range(2):
+                try:
+                    result = GoogleSearch(params).get_dict()
+                    break
+                except Exception as e:
+                    if attempt == 1 and log:
+                        log(f"         ⚠ [{loc}] p{page}: {e}")
+                    time.sleep(1.5)
+
+            if result is None:
+                break  # esta ciudad falla, pasar a la siguiente
+
+            if "error" in result:
+                if log:
+                    log(f"         ⚠ [{loc}]: {result['error']}")
+                break
+
+            jobs = result.get("jobs_results", [])
+            if not jobs:
+                break  # no más páginas para esta ciudad
+
+            for j in jobs:
+                job_id = j.get("job_id", "")
+                if job_id and job_id in seen_ids:
+                    continue
+                if job_id:
+                    seen_ids.add(job_id)
+
+                ext  = j.get("detected_extensions", {})
+                sal  = ext.get("salary", "")
+                mn, mx, cur = _parse_salary(sal)
+                all_rows.append({
+                    "title":       j.get("title", ""),
+                    "company":     j.get("company_name", ""),
+                    "location":    j.get("location", ""),
+                    "description": j.get("description", ""),
+                    "job_url":     job_id,
+                    "date_posted": _parse_date_posted(ext.get("posted_at", "")),
+                    "job_type":    ext.get("schedule_type", ""),
+                    "min_amount":  mn,
+                    "max_amount":  mx,
+                    "currency":    cur,
+                })
+
+    return all_rows
+
+
 def pipeline_datos(db_path: str = DB_PATH, log_fn=None) -> None:
     """
-    Scraping de LinkedIn Colombia con jobspy → DataFrame → DuckDB.
+    Scraping de Google Jobs Colombia vía SerpAPI → DataFrame → DuckDB.
+
+    Requiere clave en st.secrets["SERPAPI_KEY"].
+    Obtén una gratis en https://serpapi.com  (100 búsquedas/mes en el free tier).
 
     Responde la lógica:
       • BD no existe → la crea y crea la tabla
@@ -146,31 +317,30 @@ def pipeline_datos(db_path: str = DB_PATH, log_fn=None) -> None:
         if log_fn:
             log_fn(msg)
 
+    # ── API Key ──────────────────────────────────────────────────────────────
     try:
-        from jobspy import scrape_jobs
-    except ImportError:
-        raise ImportError(
-            "jobspy no está instalado. Ejecuta: pip install python-jobspy"
+        api_key = "8c8d73167a73421e4ea76038f0da4229996891d9c7ecc0fdd9ae7cf49cc9d4d2"
+    except (KeyError, FileNotFoundError):
+        raise RuntimeError(
+            "No se encontró SERPAPI_KEY en st.secrets.\n"
+            "Agrega en Streamlit Cloud → Settings → Secrets:\n"
+            "  SERPAPI_KEY = 'tu_clave_aqui'\n"
+            "Regístrate gratis en https://serpapi.com"
         )
 
-    log(f"[1/4] Iniciando scraping LinkedIn Colombia — {len(PERFILES)} queries definidas")
+    log(f"[1/4] Iniciando scraping Google Jobs Colombia — {len(PERFILES)} queries · SerpAPI")
 
     frames = []
-    total = len(PERFILES)
+    total  = len(PERFILES)
     for i, perfil in enumerate(PERFILES, 1):
-        log(f"[{i}/{total}] Buscando: {perfil}")
+        log(f"[{i}/{total}] Buscando: '{perfil}'")
         try:
-            jobs = scrape_jobs(
-                site_name=["linkedin"],
-                search_term=perfil,
-                location="Colombia",
-                results_wanted=50,
-                hours_old=720,  # últimos 30 días
-            )
-            if len(jobs) > 0:
-                jobs["perfil_busqueda"] = perfil
-                frames.append(jobs)
-                log(f"         → {len(jobs)} vacantes encontradas")
+            rows = _serpapi_scrape_perfil(perfil, api_key, pages=5, log=log)
+            if rows:
+                chunk = pd.DataFrame(rows)
+                chunk["perfil_busqueda"] = perfil
+                frames.append(chunk)
+                log(f"         → {len(rows)} vacantes encontradas")
             else:
                 log(f"         → Sin resultados")
         except Exception as e:
@@ -179,7 +349,7 @@ def pipeline_datos(db_path: str = DB_PATH, log_fn=None) -> None:
     if not frames:
         raise RuntimeError(
             "No se obtuvieron vacantes. "
-            "Verifica tu conexión a LinkedIn o ejecuta create_session.py primero."
+            "Verifica tu SERPAPI_KEY o el límite mensual de búsquedas."
         )
 
     log(f"[2/4] Combinando y limpiando {sum(len(f) for f in frames)} registros...")
@@ -208,14 +378,16 @@ def pipeline_datos(db_path: str = DB_PATH, log_fn=None) -> None:
     )
 
     def _match_perfil(row):
-        # Primero usa la query con la que se obtuvo el resultado
+        # Primero usa la query exacta con la que se obtuvo el resultado
         pb = str(row.get("perfil_busqueda", "")).strip().lower()
-        if pb and pb in [p.lower() for p in PERFILES]:
-            return pb
-        # Fallback: búsqueda por substring en el título
+        for p in PERFILES:
+            if pb == p.lower():
+                return p
+        # Fallback: clave limpia (sin "Colombia") en el título
         tl = str(row.get("title_lower", ""))
         for p in PERFILES:
-            if p.lower() in tl:
+            clave = _CLAVE.get(p, "").lower()
+            if clave and clave in tl:
                 return p
         return None
 
@@ -239,7 +411,6 @@ def pipeline_datos(db_path: str = DB_PATH, log_fn=None) -> None:
     # ── Guardar en DuckDB ─────────────────────────────────────────────────────
     log(f"[4/4] Guardando en DuckDB: tabla '{TABLA_CO}'...")
     con = duckdb.connect(db_path)
-    # CREATE OR REPLACE funciona tanto si la tabla existe como si no
     con.execute(f"CREATE OR REPLACE TABLE {TABLA_CO} AS SELECT * FROM df")
     n = con.execute(f"SELECT COUNT(*) FROM {TABLA_CO}").fetchone()[0]
     con.close()
@@ -308,12 +479,21 @@ def fig_perfiles_top(df: pd.DataFrame) -> mfig.Figure:
         .sort_values("vacantes", ascending=False)
         .head(30)
     )
-    data["nombre_es"] = data["perfil_ref"].map(PERFILES_ES)
-    data["categoria"] = data["perfil_ref"].map(CATEGORIA_PERFIL)
+    data["nombre_es"] = (
+        data["perfil_ref"].map(PERFILES_ES)
+        .fillna(data["perfil_ref"])  # fallback al nombre crudo
+        .fillna("Otros")
+        .astype(str)                 # elimina NaN float — matplotlib no acepta floats en eje categórico
+    )
+    data["categoria"] = (
+        data["perfil_ref"].map(CATEGORIA_PERFIL)
+        .fillna("Otros")
+        .astype(str)
+    )
     data = data.sort_values("vacantes")
 
     colors = [CAT_COLOR.get(c, PALETTE["gris"]) for c in data["categoria"]]
-    fig, ax = _base_fig("Perfiles Profesionales más Demandados — LinkedIn Colombia",
+    fig, ax = _base_fig("Perfiles Profesionales más Demandados — Google Jobs Colombia",
                         figsize=(13, 10))
     bars = ax.barh(data["nombre_es"], data["vacantes"],
                    color=colors, edgecolor="white", height=0.72)
@@ -387,7 +567,7 @@ def fig_seniority(df: pd.DataFrame) -> mfig.Figure:
     axes[1].set_title("Distribución (%)", color=PALETTE["text"],
                       fontsize=12, fontweight="bold")
 
-    fig.suptitle("Nivel de Experiencia Demandado — LinkedIn Colombia",
+    fig.suptitle("Nivel de Experiencia Demandado — Google Jobs Colombia",
                  color=PALETTE["text"], fontsize=13, fontweight="bold")
     plt.tight_layout()
     return fig
@@ -416,7 +596,7 @@ def fig_temporal(df: pd.DataFrame) -> mfig.Figure | None:
            color=PALETTE["azul"], alpha=0.6, label="Vacantes / semana")
     ax.plot(por_semana["semana_str"], por_semana["mm"],
             color=PALETTE["naranja"], lw=2.5, label="Media móvil 3 semanas")
-    ax.set_title(f"Publicaciones por Semana — LinkedIn Colombia | Tendencia: {tend}",
+    ax.set_title(f"Publicaciones por Semana — Google Jobs Colombia | Tendencia: {tend}",
                  color=PALETTE["text"], fontsize=13, fontweight="bold", pad=10)
     ax.set_xlabel("Semana", color=PALETTE["muted"])
     ax.set_ylabel("Vacantes", color=PALETTE["muted"])
@@ -461,7 +641,7 @@ def fig_geografico(df: pd.DataFrame) -> mfig.Figure | None:
     ax2.set_title("Distribución (%)", color=PALETTE["text"],
                   fontsize=12, fontweight="bold")
 
-    fig.suptitle(f"Distribución Geográfica — LinkedIn Colombia "
+    fig.suptitle(f"Distribución Geográfica — Google Jobs Colombia "
                  f"({pct_sin:.1f}% sin localización)",
                  color=PALETTE["text"], fontsize=13, fontweight="bold")
     plt.tight_layout()
@@ -525,10 +705,47 @@ def fig_habilidades(df: pd.DataFrame) -> mfig.Figure:
                      ha="center", va="center", transform=axes[1].transAxes,
                      fontsize=9, color="gray")
 
-    fig.suptitle("Habilidades Detectadas en Vacantes — LinkedIn Colombia",
+    fig.suptitle("Habilidades Detectadas en Vacantes — Google Jobs Colombia",
                  color=PALETTE["text"], fontsize=13, fontweight="bold")
     plt.tight_layout()
     return fig
+
+
+def fig_salarios(df: pd.DataFrame) -> mfig.Figure | None:
+    """G7 — Salario mediano por categoría (solo si el scraper trajo datos)."""
+    if "min_amount" not in df.columns:
+        return None
+    df_sal = df[df["min_amount"].notna()].copy()
+    df_sal["min_amount"] = pd.to_numeric(df_sal["min_amount"], errors="coerce")
+    df_sal["max_amount"] = pd.to_numeric(
+        df_sal.get("max_amount", pd.Series(dtype="float")), errors="coerce"
+    )
+    df_sal["sal_mid"] = df_sal[["min_amount", "max_amount"]].mean(axis=1)
+
+    sal_cat = (
+        df_sal.groupby("categoria_macro")["sal_mid"]
+        .agg(mediana="median", n="count")
+        .query("n >= 5")
+        .sort_values("mediana")
+        .reset_index()
+    )
+    if sal_cat.empty:
+        return None
+
+    import numpy as np
+    fig, ax = _base_fig("Salario Mediano por Categoría — Google Jobs Colombia", figsize=(11, 6))
+    palette = plt.cm.YlGn(np.linspace(0.35, 0.85, len(sal_cat)))
+    bars = ax.barh(sal_cat["categoria_macro"], sal_cat["mediana"],
+                   color=palette, edgecolor="white")
+    currency = df_sal["currency"].iloc[0] if "currency" in df_sal.columns else ""
+    for bar, val, n in zip(bars, sal_cat["mediana"], sal_cat["n"]):
+        ax.text(bar.get_width() + 100, bar.get_y() + bar.get_height() / 2,
+                f"{currency} {val:,.0f}  (n={n})", va="center", fontsize=9,
+                color=PALETTE["muted"])
+    ax.set_xlabel("Salario mediano anunciado", color=PALETTE["muted"], fontsize=10)
+    plt.tight_layout()
+    return fig
+
 
 # ============================================================
 # SECCIÓN STREAMLIT PRINCIPAL  (solo visualización)
@@ -538,14 +755,14 @@ def mostrar_colombia() -> None:
     """Renderiza la página Colombia en Streamlit. Solo visualización."""
 
     st.markdown(
-        "Análisis de vacantes activas en **LinkedIn Colombia** por perfil profesional, "
+        "Análisis de vacantes activas en **Google Jobs Colombia** por perfil profesional, "
         "geografía, seniority y habilidades."
     )
 
     if not bd_tiene_datos():
         st.warning(
             "⚠️ No hay datos de Colombia cargados. "
-            "Ve al **Panel de Actualización** y presiona **'Consultar LinkedIn Colombia'** "
+            "Ve al **Panel de Actualización** y presiona **'Consultar Google Jobs Colombia'** "
             "para inicializarlos."
         )
         return
@@ -556,7 +773,7 @@ def mostrar_colombia() -> None:
     con.close()
 
     st.info(
-        f"📊 Datos LinkedIn Colombia cargados · "
+        f"📊 Datos Google Jobs Colombia cargados · "
         f"**{n_vac:,} vacantes** · Última extracción: **{fecha}**"
     )
     st.caption("💡 Para actualizar, ve al **Panel de Actualización** en el menú principal.")
@@ -585,13 +802,14 @@ def mostrar_colombia() -> None:
     st.caption(f"Mostrando **{len(df_f):,}** vacantes con los filtros aplicados.")
 
     # ── Tabs ──────────────────────────────────────────────────────────────────
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "🏆 Perfiles",
         "💼 Puestos",
         "📶 Seniority",
         "📅 Temporal",
         "🗺️ Geografía",
-        "💡 Habilidades"
+        "💡 Habilidades",
+        "💰 Salarios",
     ])
 
     with tab1:
@@ -607,7 +825,7 @@ def mostrar_colombia() -> None:
         plt.close(fig2)
 
     with tab2:
-        st.subheader("Top 25 títulos exactos en LinkedIn Colombia")
+        st.subheader("Top 25 títulos exactos en Google Jobs Colombia")
         fig = fig_top_titulos(df_f)
         st.pyplot(fig, use_container_width=True)
         plt.close(fig)
@@ -647,3 +865,17 @@ def mostrar_colombia() -> None:
                 "Para análisis completo de competencias, re-ejecuta el pipeline "
                 "con `linkedin_fetch_description=True` en jobspy."
             )
+
+    with tab7:
+        st.subheader("Variaciones salariales")
+        fig = fig_salarios(df_f)
+        if fig:
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)
+        else:
+            st.info(
+                "Google Jobs Colombia no siempre publica salarios. "
+                "Para mayor cobertura, agrega `'indee   d'` a `site_name` en el pipeline."
+            )
+
+st.caption("ObserLABOR - Alumni Sabana")

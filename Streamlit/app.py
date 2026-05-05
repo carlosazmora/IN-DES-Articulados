@@ -26,10 +26,10 @@ from Proyecciones import (
     grafico_scatter_crecimiento,
 )
 from Colombia import (
-    mostrar_colombia,
     pipeline_datos as colombia_pipeline,
     bd_tiene_datos as colombia_tiene_datos,
-    DB_PATH as CO_DB_PATH,
+    mostrar_colombia,
+    DB_PATH as COL_DB_PATH,
     TABLA_CO,
 )
 
@@ -152,38 +152,39 @@ if seccion == "🏠 Panel de Actualización":
                         st.cache_data.clear()
                     ejecutar_con_progreso(proceso, "Obteniendo habilidades O*NET...")
 
-    # --- DuckDB: Colombia LinkedIn ---
-    _co_lista = colombia_tiene_datos()
+    # --- DuckDB: Vacantes Colombia (Google Jobs) ---
+    _col_lista = colombia_tiene_datos()
 
-    with st.expander("🌺 Gestión de datos Colombia — LinkedIn", expanded=True):
+    with st.expander("🌺 Gestión de datos Colombia (Google Jobs)", expanded=True):
         col_estado, col_boton = st.columns([3, 1])
 
-        if _co_lista:
-            _con_co   = _ddb2.connect(CO_DB_PATH, read_only=True)
-            _n_co     = _con_co.execute(f"SELECT COUNT(*) FROM {TABLA_CO}").fetchone()[0]
-            _fecha_co = _con_co.execute(f"SELECT MAX(fecha_extraccion) FROM {TABLA_CO}").fetchone()[0]
-            _con_co.close()
+        if _col_lista:
+            import duckdb as _ddb_col
+            _con = _ddb_col.connect(COL_DB_PATH, read_only=True)
+            _n_col  = _con.execute(f"SELECT COUNT(*) FROM {TABLA_CO}").fetchone()[0]
+            _fecha_col = _con.execute(f"SELECT MAX(fecha_extraccion) FROM {TABLA_CO}").fetchone()[0]
+            _con.close()
             with col_estado:
-                st.caption(f"✅ Colombia lista · **{_n_co:,} vacantes** · Última extracción: **{_fecha_co}**")
+                st.caption(f"✅ Colombia lista · **{_n_col:,} vacantes** · Última extracción: **{_fecha_col}**")
             with col_boton:
-                if st.button("🔄 Actualizar LinkedIn", use_container_width=True, key="btn_co_update"):
-                    def proceso(log_fn):
+                if st.button("🔄 Actualizar Colombia", use_container_width=True, key="btn_col_update"):
+                    def proceso_col(log_fn):
                         colombia_pipeline(log_fn=log_fn)
                         st.cache_data.clear()
-                    ejecutar_con_progreso(proceso, "Scrapeando LinkedIn Colombia...")
+                    ejecutar_con_progreso(proceso_col, "Actualizando vacantes Colombia...")
         else:
             with col_estado:
-                st.caption("❌ Sin datos de Colombia. Presiona **Consultar LinkedIn** para inicializarlos.")
+                st.caption("❌ Sin datos de Colombia. Presiona **Consultar Colombia** para inicializarlos.")
             with col_boton:
-                if st.button("🟢 Consultar LinkedIn", use_container_width=True, key="btn_co_create"):
-                    def proceso(log_fn):
+                if st.button("🟢 Consultar Colombia", use_container_width=True, key="btn_col_create"):
+                    def proceso_col(log_fn):
                         colombia_pipeline(log_fn=log_fn)
                         st.cache_data.clear()
-                    ejecutar_con_progreso(proceso, "Obteniendo vacantes LinkedIn Colombia...")
+                    ejecutar_con_progreso(proceso_col, "Obteniendo vacantes Colombia...")
 
 # ==================== DATOS NACIONALES ====================
 elif seccion == "🌺 Datos Nacionales":
-    st.title("🌺 Vacantes en Colombia — LinkedIn")
+    st.title("🌺 Vacantes en Colombia — Google Jobs")
     mostrar_colombia()
 
 # ==================== ANÁLISIS POR PROGRAMA ====================
@@ -201,9 +202,9 @@ elif seccion == "📈 Tendencias e Insights":
     st.title("📈 Tendencias e Insights Estratégicos")
     mostrar_tendencias_e_insights()
 
-# ==================== VARIACIONES ====================
+# ==================== VARIACIONES SALARIALES ====================
 elif seccion == "💰 Variaciones Salariales":
-    st.title("💰 Variaciones Salariales")
+    st.title("💰 Variaciones Salariales Internacionales")
     mostrar_variaciones_salariales()
 
 # ==================== PROYECCIONES ====================
@@ -213,31 +214,28 @@ elif seccion == "📊 Predicciones":
     archivo = st.file_uploader(
         "Sube el archivo de predicciones (.xlsx)",
         type=["xlsx"],
-        accept_multiple_files=False,  # ← EXPLÍCITAMENTE: solo un archivo
+        accept_multiple_files=False,
         help="Usa el archivo occupation.xlsx del BLS Employment Projections Program.",
     )
 
     if archivo is None:
         st.info("⬆️ Sube el archivo Excel para comenzar el análisis.")
 
-        st.caption(
-    """
-        Guía de Navegación: Proyecciones Ocupacionales BLS
+        st.caption("""
+            **📥 Cómo obtener el archivo de predicciones del BLS:**
 
-        1.	Acceso inicial: Abra en su navegador el siguiente link: https://www.bls.gov/emp/tables.htm 
-        2.	Categoría de Ocupaciones: En la nueva pantalla, verás una lista organizada por categorías. Ubícate en el primer ítem titulado "Occupations" (Ocupaciones).
-        3.	Descarga Final: Dentro de esa sección, busca el enlace directo que dice: "All occupational tables in a single file (XLSX)" y suba el excel “occupations” a la página.
-        
-        En caso de que no le sirva el link anterior, haga lo siguiente: 
-        
-        1.	Acceso Inicial: Abre tu navegador y dirígete a la página principal del Bureau of Labor Statistics (bls.gov) https://www.bls.gov/ .
-        2.	Menú Principal: En la barra de navegación superior, haz clic en la pestaña "Subjects" (Temas).
-        3.	Selección de Área: Dentro del menú desplegable, busca “Subjects”, en el menú desplegable busque "Employment" (Empleo) y selecciona la opción "Employment Projections".
-        4.	Sección de Datos: Una vez en la página de predicciones, busca en el menú "EP Data" (Datos de Predicciones de Empleo) y posteriormente seleccione “Tables” (tablas).
-        5.	Categoría de Ocupaciones: En la nueva pantalla, verás una lista organizada por categorías. Ubícate en el primer ítem titulado "Occupations" (Ocupaciones).
-        6.	Descarga Final: Dentro de esa sección, busca el enlace directo que dice: "All occupational tables in a single file (XLSX)" y suba el excel “occupations” a la página.
-    """
-               )
+            **Ruta principal (recomendada):**
+            1. Abre: https://www.bls.gov/emp/tables.htm
+            2. Busca la sección **"Occupations"** y dentro de ella, haz clic en **"All occupational tables in a single file (XLSX)"**
+            3. Descarga el archivo y súbelo aquí
+
+            **Ruta alternativa:**
+            1. Ve a https://www.bls.gov/ → **"Subjects"** → **"Employment"** → **"Employment Projections"**
+            2. En el menú lateral izquierdo, selecciona **"Tables"** → **"Occupations"**
+            3. Haz clic en **"All occupational tables in a single file (XLSX)"** y descarga el archivo
+
+            > 💡 **Nota:** Si te pierdes, usa el buscador interno del BLS con las palabras "Employment Projections tables"
+        """)
     else:
         with st.spinner("Cargando datos..."):
             df11, df12, df13, df14, df15, df16 = cargar_proyecciones(archivo)

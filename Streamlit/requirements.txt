@@ -10,3 +10,5 @@ anthropic
 duckdb
 matplotlib
 jobspy==0.29.0
+serpapi
+google-search-results
