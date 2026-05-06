@@ -15,4 +15,4 @@ def mostrar_tendencias_e_insights():
             panel_nombre="Tendencias e Insights Estratégicos",
             contexto_datos=contexto
         )
-    st.caption("🔍 *Nota: La función de análisis con Claude está temporalmente deshabilitada. Si te interesa explorarla, contáctanos en www.linkedin.com/in/carlosazmora, https://www.linkedin.com/in/celyjorge/, https://www.linkedin.com/in/alejandro-morantes-castellanos, https://www.linkedin.com/in/dianapaolaquintero?utm_source=share_via&utm_content=profile&utm_medium=member_android*")
+    st.caption("🔍 *Nota: La función de análisis con Claude está temporalmente deshabilitada. Si te interesa explorarla, contáctanos en www.linkedin.com/in/carlosazmora, https://www.linkedin.com/in/celyjorge/, https://www.linkedin.com/in/alejandro-morantes-castellanos, https://www.linkedin.com/in/dianapaolaquintero*")
